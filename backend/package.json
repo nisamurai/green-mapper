@@ -1,0 +1,29 @@
+{
+	"name": "elysia-base",
+	"version": "1.0.50",
+	"scripts": {
+		"dev": "bun run --watch src/index.ts",
+		"format": "biome format --write src/**/*.ts",
+		"lint": "biome lint --write src/**/*.ts",
+		"check": "biome check --write src/**/*.ts",
+		"build": "bun build src/index.ts --minify --target=bun --outfile dist/app.js && bun build scripts/migrate.ts --minify --target=bun --outfile dist/migrate.js",
+		"start": "bun dist/migrate.js && bun dist/app.js"
+	},
+	"dependencies": {
+		"@elysiajs/cors": "^1.3.1",
+		"@elysiajs/swagger": "^1.3.0",
+		"better-auth": "^1.2.7",
+		"dotenv": "^16.5.0",
+		"drizzle-orm": "^0.43.1",
+		"elysia": "latest",
+		"pg": "^8.15.6"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.9.4",
+		"@types/pg": "^8.11.14",
+		"bun-types": "latest",
+		"drizzle-kit": "^0.31.1",
+		"tsx": "^4.19.4"
+	},
+	"module": "src/index.js"
+}

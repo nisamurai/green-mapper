@@ -6,7 +6,7 @@ import { openAPI } from "better-auth/plugins";
 import Elysia from "elysia";
 
 export const auth = betterAuth({
-	basePath: "/auth",
+    basePath: "/auth",
 	database: drizzleAdapter(db, {
 		provider: "pg",
 		schema,
@@ -17,6 +17,7 @@ export const auth = betterAuth({
 	plugins: [openAPI({ path: "/swagger" })],
 	advanced: {
 		cookiePrefix: "swag",
+		disableCSRFCheck: true,
 		ipAddress: {
 			ipAddressHeaders: ["x-client-ip", "x-forwarded-for"],
 			disableIpTracking: false,

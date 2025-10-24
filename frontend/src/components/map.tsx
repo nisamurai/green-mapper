@@ -60,6 +60,7 @@ function DarkMapSPB() {
 			}),
 		}),
 	}));
+	const mapContainerRef = useRef<HTMLDivElement>(null);
 
 	// Загрузка данных о заявках с бэкенда
 	const { data: issuesData, error: issuesError } = useSWR<Report[]>("/reports/", fetcher);
@@ -68,27 +69,12 @@ function DarkMapSPB() {
 	useEffect(() => {
 		console.log("Map initialization effect running");
 
-		const mapTarget = document.getElementById("map");
-
-		if (!mapTarget) {
-			console.error("Map target element #map not found!");
-            // Если элемент не найден сразу, возможно, он еще не в DOM.
-            // Повторяем поиск через requestAnimationFrame.
-            requestAnimationFrame(() => {
-                console.log("Retrying to find #map element...");
-                // Повторно вызываем checkDimensionsAndInitialize через requestAnimationFrame
-                checkDimensionsAndInitialize();
-            });
-			return;
-		}
-
 		let resizeObserver: ResizeObserver | null = null;
         let animationFrameId: number | null = null;
 
-
 		// Функция для проверки размеров контейнера и инициализации карты с использованием requestAnimationFrame
 		const checkDimensionsAndInitialize = () => {
-            const currentMapTarget = document.getElementById("map");
+            const currentMapTarget = mapContainerRef.current;
             if (!currentMapTarget) {
                  console.warn("#map element disappeared, stopping dimension check.");
                  return; // Элемент исчез, останавливаем проверку
@@ -106,7 +92,7 @@ function DarkMapSPB() {
                 ];
 
                 const map = new Map({
-                    target: "map",
+                    target: currentMapTarget,
                     layers: [
                         new TileLayer({
                             source: new OSM({ attributions: "", maxZoom: 19 }),
@@ -222,6 +208,15 @@ function DarkMapSPB() {
             }
         };
 
+		if (!mapContainerRef.current) {
+			console.error("Map target element #map not found!");
+            requestAnimationFrame(() => {
+                console.log("Retrying to find #map element...");
+                checkDimensionsAndInitialize();
+            });
+			return;
+		}
+
         // Начинаем процесс проверки размеров и инициализации
         checkDimensionsAndInitialize();
 
@@ -245,8 +240,8 @@ function DarkMapSPB() {
 			issueMarkerSourceRef.current.clear();
 			tempMarkerSourceRef.current.clear();
 		};
-    // Этот эффект должен запускаться только один раз при монтировании
-	}, []); // Пустой массив зависимостей
+    // Этот эффект должен запускаться когда обновляются завки
+	}, [issuesData]);
 
 	// Эффект для добавления ПЕРСИСТЕНТНЫХ меток при загрузке данных о заявках или их изменении
 	useEffect(() => {
@@ -304,7 +299,7 @@ function DarkMapSPB() {
 	return (
 		<div style={{ width: "100%", height: "100%", position: "relative" }}>
 			{/* Элемент, куда будет рендериться карта OpenLayers */}
-			<div id="map" style={{ width: "100%", height: "100%" }} />
+			<div id="map" ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
 
 			{/* Попап для отображения информации о заявке или создания новой */}
 			<div

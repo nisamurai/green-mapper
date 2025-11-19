@@ -113,114 +113,456 @@ ERD схема:
 
 
 ## Unit-тестирование
-TODO
+Для запуска unit-тестов (frontend + backend) используется Docker и bash, на хосте достаточно установленного Docker.
+
+- **Backend unit-тесты**: `bun test` в директории `backend/test`: проверяются роуты и вспомогательная логика без реальной БД.
+- **Frontend unit-тесты**: `vitest` в директории `frontend/src/test`: тестируются хуки, утилиты и клиентские функции.
+
+Оба набора тестов запускаются автоматически через общий скрипт (см. раздел «Сборка и запуск»).
 
 ## Интеграционное тестирование
-TODO
+Интеграционные тесты находятся в `backend/tests` и покрывают полный сценарий:
+
+- **Регистрация/логин** пользователя через Better Auth
+- **Создание заявки** через HTTP API `/reports`
+- **Проверка сохранения заявки** в PostgreSQL через Drizzle ORM
+
 
 ## Сборка и запуск
-TODO
+В проекте есть bash-скрипт `run_all.sh`, который выполняет полный цикл «сборка -> unit-тесты -> интеграционные тесты -> запуск приложения» в одной команде.
 
+1. **Сборка**:
+   - Собирается Docker-образ backend `greenmapper-backend` (Bun + Elysia).
+   - Собирается Docker-образ frontend `greenmapper-frontend` (Bun + Vite + Caddy).
+2. **Unit-тесты**:
+   - В контейнере `oven/bun` выполняются backend-тесты из `backend/test`.
+   - Во втором контейнере `oven/bun` выполняются frontend-тесты `vitest` из `frontend/src/test`.
+3. **Интеграционные тесты**:
+   - В отдельной Docker-сети поднимаются контейнеры PostgreSQL и backend.
+   - При старте backend вызывает `dist/migrate.js`, который применяет миграции Drizzle и **добавляет базовые 1 тип проблемы и 1 статус заявки** в таблицах `issue_types` и `issue_statuses`.
+   - В отдельном контейнере запускаются тесты из `backend/tests`, которые обращаются к живому HTTP API и БД.
+4. **Запуск приложения**:
+   - В Docker-сети `greenmapper-app-net` поднимаются PostgreSQL и backend с пробросом портов:
+     - Backend: `http://localhost:3000`
+     - PostgreSQL: `localhost:5252` (для локальных подключений, если требуется).
+   - Поднимается frontend (Caddy) на `http://localhost:5173`.
+
+### Итого
+
+- **Требования**: установлен `docker` и `bash`
+- **Команда** (из корня репозитория):
+
+```bash
+./run_all.sh
+```
+
+После успешного выполнения:
+
+- Backend будет доступен по адресу: `http://localhost:3000`
+- Frontend будет доступен по адресу: `http://localhost:5173`
 
 ## API (детально)
 
 Бэкенд: `http://localhost:3000`. CORS разрешает `http://localhost:5173`.
 
-### Аутентификация (Better Auth)
-Better Auth - `/auth` <br/>
-Основные вызовы:
+## Authentication (better-auth)
 
-- `POST /auth/api/sign-up/email` - регистрация по email+паролю
-- `POST /auth/api/sign-in/email` - вход по email+паролю
-- `POST /auth/api/sign-out` - выход
+### POST /auth/sign-up
+**Описание**: Регистрация нового пользователя
 
-TODO: добавить везде параметры запроса
-
-Пример успешного ответа входа (200):
+**Входные данные (body)**:
 ```json
 {
-  "redirect": false,
-  "token": "string",
-  "url": null,
+  "email": "ivan@example.com",
+  "password": "Str0ngP@ssw0rd",
+  "name": "Иван"
+}
+```
+
+**Выходные данные (201)**:
+```json
+{
   "user": {
-    "id": "string",
-    "email": "string",
-    "name": "string | null",
-    "image": "string | null",
-    "emailVerified": true,
-    "createdAt": "2025-01-01T00:00:00.000Z",
-    "updatedAt": "2025-01-01T00:00:00.000Z"
+    "id": "user_123",
+    "email": "ivan@example.com",
+    "name": "Иван",
+    "createdAt": "2025-11-01T12:00:00Z"
   }
 }
 ```
 
+**Возможные коды ответов**:
+- `201` — Пользователь создан
+- `400` — Некорректные данные (email уже существует, пароль слабый)
+- `500` — Внутренняя ошибка сервера
 
-### Пользователь
-- `GET /users/me` - профиль текущего пользователя (требуется авторизация). Возвращает записи из БД (`user`), например:
+---
+
+### POST /auth/sign-in
+**Описание**: Вход пользователя в систему
+
+**Входные данные (body)**:
 ```json
 {
-  "id": "uuid",
+  "email": "ivan@example.com",
+  "password": "Str0ngP@ssw0rd"
+}
+```
+
+**Выходные данные (200)**:
+```json
+{
+  "session": {
+    "token": "<SESSION_TOKEN>",
+    "expiresAt": "2025-12-17T12:00:00Z"
+  },
+  "user": {
+    "id": "user_123",
+    "email": "ivan@example.com",
+    "name": "Иван"
+  }
+}
+```
+
+**Возможные коды ответов**:
+- `200` — Успешный вход
+- `400` — Некорректный email или пароль
+- `401` — Неверные учетные данные
+- `500` — Внутренняя ошибка сервера
+
+---
+
+### POST /auth/sign-out
+**Описание**: Выход пользователя из системы
+
+**Входные данные**: нет (требуется Auth header)
+
+**Выходные данные (200)**:
+```json
+{ "success": true }
+```
+
+**Возможные коды ответов**:
+- `200` — Успешный выход
+- `401` — Неавторизован
+- `500` — Внутренняя ошибка сервера
+
+---
+
+### GET /auth/session
+**Описание**: Получить текущую сессию пользователя
+
+**Входные данные**: нет
+
+**Выходные данные (200)**:
+```json
+{
+  "session": {
+    "id": "session_123",
+    "userId": "user_123",
+    "expiresAt": "2025-12-17T12:00:00Z"
+  },
+  "user": {
+    "id": "user_123",
+    "email": "ivan@example.com",
+    "name": "Иван",
+    "points": 5,
+    "role": "user"
+  }
+}
+```
+
+**Возможные коды ответов**:
+- `200` — Сессия активна
+- `401` — Нет активной сессии
+- `500` — Внутренняя ошибка сервера
+
+---
+
+## Users
+
+### GET /users/me
+**Описание**: Получить информацию о текущем авторизованном пользователе
+
+**Требуется Auth**: Да
+
+**Входные данные**: нет
+
+**Выходные данные (200)**:
+```json
+{
+  "id": "user_123",
   "name": "Иван",
-  "email": "user@example.com",
+  "email": "ivan@example.com",
   "emailVerified": true,
   "image": null,
-  "createdAt": "2025-01-01T00:00:00.000Z",
-  "updatedAt": "2025-01-01T00:00:00.000Z",
-  "points": 3,
+  "createdAt": "2025-11-01T12:00:00Z",
+  "updatedAt": "2025-11-02T12:00:00Z",
+  "points": 5,
   "role": "user"
 }
 ```
 
-### Заявки (`/reports`)
+**Возможные коды ответов**:
+- `200` — Успешно получено
+- `401` — Неавторизован
+- `404` — Пользователь не найден
+- `500` — Внутренняя ошибка сервера
 
-- `GET /reports/` - список заявок с данными пользователя, типа и статуса.
+---
+
+## Reports (Заявки)
+
+### GET /reports
+**Описание**: Получить список всех заявок с информацией о типе, статусе и авторе
+
+**Требуется Auth**: Да
+
+**Входные данные**: нет (опционально query параметры для фильтрации)
+
+**Выходные данные (200)**:
 ```json
 [
   {
-    "issueId": 123,
-    "shortDescription": "Свалка у подъезда",
-    "detailedDescription": "Пакеты мусора лежат 3 дня",
-    "address": "ул. Примерная, 1",
-    "latitude": "59.93863",
-    "longitude": "30.31413",
-    "createdAt": "2025-01-01T12:00:00.000Z",
+    "issueId": 12,
+    "shortDescription": "Разбитый тротуар",
+    "detailedDescription": "Дыра около дома 5",
+    "address": "ул. Примерная, 5",
+    "latitude": "55.755825",
+    "longitude": "37.617298",
+    "createdAt": "2025-11-10T10:00:00Z",
     "expectedResolutionDate": null,
     "statusName": "В обработке",
-    "typeName": "Мусор",
+    "statusId": 1,
+    "typeName": "Инфраструктура",
     "userName": "Иван",
-    "userPoints": 3,
-    "statusId": 1
+    "userPoints": 10
   }
 ]
 ```
 
-- `GET /reports/:id` - одна заявка по ID. `404`, если не найдена.
+**Возможные коды ответов**:
+- `200` — Список получен
+- `401` — Неавторизован
+- `500` — Внутренняя ошибка сервера
 
-- `GET /reports/issue-types` - список типов заявок.
+---
+
+### GET /reports/:id
+**Описание**: Получить одну конкретную заявку по ID
+
+**Требуется Auth**: Да
+
+**Входные данные**:
+- `id` (path parameter, number) — ID заявки
+
+**Выходные данные (200)**:
+```json
+{
+  "issueId": 12,
+  "userId": "user_123",
+  "typeId": 1,
+  "statusId": 1,
+  "shortDescription": "Разбитый тротуар",
+  "detailedDescription": "Дыра около дома 5",
+  "address": "ул. Примерная, 5",
+  "latitude": "55.755825",
+  "longitude": "37.617298",
+  "createdAt": "2025-11-10T10:00:00Z",
+  "expectedResolutionDate": null
+}
+```
+
+**Возможные коды ответов**:
+- `200` — Заявка получена
+- `401` — Неавторизован
+- `404` — Заявка не найдена
+- `500` — Внутренняя ошибка сервера
+
+---
+
+### GET /reports/issue-types
+**Описание**: Получить список доступных типов заявок
+
+**Требуется Auth**: Да
+
+**Входные данные**: нет
+
+**Выходные данные (200)**:
 ```json
 [
-  { "typeId": 1, "name": "Мусор" },
-  { "typeId": 2, "name": "Дороги" }
+  { "typeId": 1, "name": "Инфраструктура" },
+  { "typeId": 2, "name": "Экология" },
+  { "typeId": 3, "name": "Дорожная" }
 ]
 ```
 
-- `POST /reports/` - создать заявку (авторизация обязательна).
+**Возможные коды ответов**:
+- `200` — Список типов получен
+- `401` — Неавторизован
+- `500` — Внутренняя ошибка сервера
+
+---
+
+### POST /reports
+**Описание**: Создать новую заявку
+
+**Требуется Auth**: Да
+
+**Входные данные (body)**:
 ```json
 {
-  "latitude": "59.93863",
-  "longitude": "30.31413",
-  "typeId": 1,
-  "shortDescription": "Свалка у подъезда",
-  "detailedDescription": "Пакеты мусора лежат 3 дня",
-  "address": "ул. Примерная, 1"
+  "latitude": "55.755825",
+  "longitude": "37.617298",
+  "typeId": 2,
+  "shortDescription": "Колодец открыт",
+  "detailedDescription": "Рядом со школой",
+  "address": "ул. Примерная, 10"
 }
 ```
-Успешный ответ (201): созданная запись `issues`.
 
-- `DELETE /reports/:id` - удалить заявку (только `admin`).
-- `PUT /reports/:id/status` - обновить статус (только `admin`).
+**Валидация**:
+- `latitude` (string) — обязательно
+- `longitude` (string) — обязательно
+- `typeId` (number) — обязательно, должен существовать в `issue_types`
+- `shortDescription` (string) — обязательно, макс 200 символов
+- `detailedDescription` (string) — опционально, макс 1000 символов
+- `address` (string) — обязательно, макс 255 символов
+
+**Выходные данные (201)**:
 ```json
-{ "statusId": 2 }
+{
+  "issueId": 101,
+  "userId": "user_123",
+  "typeId": 2,
+  "statusId": 1,
+  "shortDescription": "Колодец открыт",
+  "detailedDescription": "Рядом со школой",
+  "address": "ул. Примерная, 10",
+  "latitude": "55.755825",
+  "longitude": "37.617298",
+  "createdAt": "2025-11-16T12:00:00Z",
+  "expectedResolutionDate": null
+}
 ```
 
-Коды ошибок: `401 Unauthorized` (нет сессии), `403 Forbidden` (нет прав), `404 Not Found`, `500 Internal Server Error`.
+**Возможные коды ответов**:
+- `201` — Заявка создана успешно
+- `400` — Некорректные входные данные (typeId не найден, некорректное тело)
+- `401` — Неавторизован
+- `500` — Внутренняя ошибка сервера
+
+---
+
+### DELETE /reports/:id
+**Описание**: Удалить заявку (только для администраторов)
+
+**Требуется Auth**: Да (роль `admin`)
+
+**Входные данные**:
+- `id` (path parameter, number) — ID заявки
+
+**Выходные данные (200)**:
+```json
+{
+  "success": true,
+  "issueId": 101
+}
+```
+
+**Возможные коды ответов**:
+- `200` — Заявка удалена
+- `401` — Неавторизован
+- `403` — Недостаточно прав (не администратор)
+- `404` — Заявка не найдена
+- `500` — Внутренняя ошибка сервера
+
+---
+
+### PUT /reports/:id/status
+**Описание**: Изменить статус заявки (только для администраторов)
+
+**Требуется Auth**: Да (роль `admin`)
+
+**Входные данные**:
+- `id` (path parameter, number) — ID заявки
+- Body:
+```json
+{
+  "statusId": 2
+}
+```
+
+**Валидация**:
+- `statusId` (number) — обязательно, должен существовать в `issue_statuses`
+
+**Выходные данные (200)**:
+```json
+{
+  "success": true,
+  "issue": {
+    "issueId": 101,
+    "statusId": 2
+  }
+}
+```
+
+**Возможные коды ответов**:
+- `200` — Статус обновлен
+- `400` — Некорректные входные данные
+- `401` — Неавторизован
+- `403` — Недостаточно прав (не администратор)
+- `404` — Заявка не найдена
+- `500` — Внутренняя ошибка сервера
+
+---
+
+## Таблицы и схемы
+
+### Пользователи (user)
+```json
+{
+  "id": "string (primary key)",
+  "name": "string",
+  "email": "string (unique)",
+  "emailVerified": "boolean",
+  "image": "string | null",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp",
+  "points": "integer (default: 0)",
+  "role": "user | admin (default: user)"
+}
+```
+
+### Заявки (issues)
+```json
+{
+  "issueId": "integer (primary key)",
+  "userId": "string (foreign key -> user.id)",
+  "typeId": "integer (foreign key -> issue_types.typeId)",
+  "statusId": "integer (foreign key -> issue_statuses.statusId)",
+  "shortDescription": "string (max 200)",
+  "detailedDescription": "string (max 1000) | null",
+  "address": "string (max 255)",
+  "latitude": "decimal",
+  "longitude": "decimal",
+  "createdAt": "timestamp (default: now)",
+  "expectedResolutionDate": "date | null"
+}
+```
+
+### Типы заявок (issue_types)
+```json
+{
+  "typeId": "integer (primary key)",
+  "name": "string (unique, max 250)"
+}
+```
+
+### Статусы заявок (issue_statuses)
+```json
+{
+  "statusId": "integer (primary key)",
+  "name": "string (unique, max 20)"
+}
+```

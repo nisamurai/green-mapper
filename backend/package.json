@@ -7,7 +7,10 @@
 		"lint": "biome lint --write src/**/*.ts",
 		"check": "biome check --write src/**/*.ts",
 		"build": "bun build src/index.ts --minify --target=bun --outfile dist/app.js && bun build scripts/migrate.ts --minify --target=bun --outfile dist/migrate.js",
-		"start": "bun dist/migrate.js && bun dist/app.js"
+		"start": "bun dist/migrate.js && bun dist/app.js",
+		"test": "bun test",
+		"test:watch": "bun test --watch",
+		"test:coverage": "bun test --coverage"
 	},
 	"dependencies": {
 		"@bogeychan/elysia-logger": "^0.1.10",
@@ -25,6 +28,9 @@
 		"bun-types": "latest",
 		"drizzle-kit": "^0.31.1",
 		"tsx": "^4.19.4"
+	},
+	"peerDependencies": {
+		"@types/bun": "latest"
 	},
 	"module": "src/index.js"
 }

@@ -2,6 +2,20 @@
 
 ### Сервис сбора и отображения городских проблем на карте с системой заявок, типами проблем и статусами их решения, а также аутентификацией и ролями пользователей
 
+
+<div align="center">
+  <img src="docs/map.png" alt="Карта" width="45%"
+    style="margin-right: 1%; margin-bottom: 1%;">
+  <img src="docs/report.png" alt="Просмотр заявки" width="45%" 
+    style="margin-bottom: 1%;">
+</div>
+<div align="center">
+  <img src="docs/reports.png" alt="Список заявок" width="45%"
+    style="margin-right: 1%; margin-bottom: 1%;">
+  <img src="docs/admin-panel.png" alt="Панель админа" width="45%" 
+    style="margin-bottom: 1%;">
+</div>
+
 > Фронтенд: <br/>
   React + Vite + OpenLayers <br/>
 >

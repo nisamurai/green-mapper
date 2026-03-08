@@ -20,7 +20,7 @@ export const user = pgTable("user", {
 	createdAt: timestamp("created_at").notNull(),
 	updatedAt: timestamp("updated_at").notNull(),
 	points: integer("points").notNull().default(0),
-	role: varchar("role", { length: 5 }).$type<"user" | "admin">().default("user"),
+	role: varchar("role", { length: 8 }).$type<"user" | "admin" | "operator">().default("user"),
 });
 
 export const session = pgTable("session", {
@@ -131,11 +131,27 @@ export const adminActions = pgTable("admin_actions", {
   actionDate: timestamp("action_date").defaultNow(),
 });
 
+// Действия операторов
+export const operatorActions = pgTable("operator_actions", {
+  actionId: serial("action_id").primaryKey(),
+  issueId: integer("issue_id")
+    .notNull()
+    .references(() => issues.issueId),
+  operatorId: text("operator_id")
+    .notNull()
+    .references(() => user.id),
+  actionType: varchar("action_type", { length: 50 }).notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  actionDate: timestamp("action_date").defaultNow(),
+});
+
 // Отношения
 export const usersRelations = relations(user, ({ many }) => ({
   issues: many(issues),
   comments: many(comments),
   adminActions: many(adminActions),
+  operatorActions: many(operatorActions),
 }));
 
 export const issuesRelations = relations(issues, ({ one, many }) => ({
@@ -145,6 +161,7 @@ export const issuesRelations = relations(issues, ({ one, many }) => ({
   photos: many(photos),
   comments: many(comments),
   adminActions: many(adminActions),
+  operatorActions: many(operatorActions),
 }));
 
 export const photosRelations = relations(photos, ({ one }) => ({

@@ -10,6 +10,8 @@ if (!dbUrl) throw new Error("DATABASE_URL is missing");
 
 const db = drizzle(dbUrl);
 
+await db.execute(sql`CREATE SCHEMA IF NOT EXISTS auth;`);
+
 await migrate(db, { migrationsFolder: "drizzle" });
 
 console.log("Migrations applied, seeding lookup tables...");

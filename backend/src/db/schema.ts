@@ -9,9 +9,13 @@ import {
 	text,
 	timestamp,
 	varchar,
+  pgSchema
 } from "drizzle-orm/pg-core";
 
-export const user = pgTable("user", {
+const authSchema = pgSchema("auth");
+
+
+export const user = authSchema.table("user", {
 	id: text("id").primaryKey(),
 	name: text("name").notNull(),
 	email: text("email").notNull().unique(),
@@ -23,7 +27,7 @@ export const user = pgTable("user", {
 	role: varchar("role", { length: 8 }).$type<"user" | "admin" | "operator">().default("user"),
 });
 
-export const session = pgTable("session", {
+export const session = authSchema.table("session", {
 	id: text("id").primaryKey(),
 	expiresAt: timestamp("expires_at").notNull(),
 	token: text("token").notNull().unique(),
@@ -36,7 +40,7 @@ export const session = pgTable("session", {
 		.references(() => user.id, { onDelete: "cascade" }),
 });
 
-export const account = pgTable("account", {
+export const account = authSchema.table("account", {
 	id: text("id").primaryKey(),
 	accountId: text("account_id").notNull(),
 	providerId: text("provider_id").notNull(),
@@ -54,7 +58,7 @@ export const account = pgTable("account", {
 	updatedAt: timestamp("updated_at").notNull(),
 });
 
-export const verification = pgTable("verification", {
+export const verification = authSchema.table("verification", {
 	id: text("id").primaryKey(),
 	identifier: text("identifier").notNull(),
 	value: text("value").notNull(),
@@ -176,4 +180,9 @@ export const commentsRelations = relations(comments, ({ one }) => ({
 export const adminActionsRelations = relations(adminActions, ({ one }) => ({
   issue: one(issues, { fields: [adminActions.issueId], references: [issues.issueId] }),
   admin: one(user, { fields: [adminActions.adminId], references: [user.id] }),
+}));
+
+export const operatorActionsRelations = relations(operatorActions, ({ one }) => ({
+  issue: one(issues, { fields: [operatorActions.issueId], references: [issues.issueId] }),
+  operator: one(user, { fields: [operatorActions.operatorId], references: [user.id] }),
 }));

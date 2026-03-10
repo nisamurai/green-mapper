@@ -24,7 +24,7 @@ export const user = authSchema.table("user", {
 	createdAt: timestamp("created_at").notNull(),
 	updatedAt: timestamp("updated_at").notNull(),
 	points: integer("points").notNull().default(0),
-	role: varchar("role", { length: 8 }).$type<"user" | "admin" | "operator">().default("user"),
+	role: varchar("role", { length: 10 }).$type<"user" | "admin" | "operator">().default("user"),
 });
 
 export const session = authSchema.table("session", {

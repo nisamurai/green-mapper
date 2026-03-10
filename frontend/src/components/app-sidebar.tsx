@@ -34,7 +34,9 @@ const data = {
 		{
 			title: "Навигация",
 			url: "#",
-			adminOnly: false,
+			accessedByUser: true,
+			accessedByAdmin: true,
+			accessedByOperator: true,
 			items: [
 				{
 					title: "Профиль",
@@ -57,7 +59,18 @@ const data = {
 		},
 		{
 			title: "Вкладки для Админа",
-			adminOnly: true,
+			accessedByAdmin: true,
+			url: "#",
+			items: [
+				{
+					title: "Панель управления заявками",
+					url: "/dashboard/reports-panel",
+				},
+			],
+		},
+		{
+			title: "Вкладки для Оператора",
+			accessedByOperator: true,
 			url: "#",
 			items: [
 				{
@@ -101,9 +114,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 			<SidebarContent>
 				{/* We create a SidebarGroup for each parent. */}
 				{data.navMain
-					.filter(({ adminOnly }) =>
-						adminOnly ? user?.role === "admin" : true,
-					)
+					.filter(({ 
+						accessedByUser, 
+						accessedByAdmin, 
+						accessedByOperator
+					 }) => {
+						switch(user?.role) {
+							case "user": return !!accessedByUser
+							case "admin": return !!accessedByAdmin
+							case "operator": return !!accessedByOperator
+							default: return false
+						}
+					})
 					.map((item) => (
 						<SidebarGroup key={item.title}>
 							<SidebarGroupLabel>{item.title}</SidebarGroupLabel>

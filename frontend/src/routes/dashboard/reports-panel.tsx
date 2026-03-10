@@ -35,6 +35,12 @@ interface Report {
     userPoints?: number | null;
 }
 
+const IssueStatuses = {
+	PENDING: 1,
+	IN_WORK: 2,
+	FINISHED: 3,
+	DECLINED: 4,
+} as const
 
 import {
 	Table,
@@ -48,6 +54,7 @@ import {
 
 // Импортируем toast из sonner
 import { toast } from "sonner";
+import type { UserProfile } from "./profile";
 
 // Импортируем компоненты для диалогового окна подтверждения удаления (опционально, но рекомендуется)
 // import {
@@ -63,12 +70,13 @@ import { toast } from "sonner";
 // } from "@/components/ui/alert-dialog";
 
 
-export const DashboardReportsPanel = () => {
+export const DashboardReportsPanel  = () => {
 	const navigate = useNavigate();
 	const [str, setStr] = useState("GreenMapper");
 	// Используем useSWR для получения данных, ключ кэша - "/reports/"
 	const { data: issues, error, isLoading } = useSWR<Report[]>("/reports/", fetcher);
-
+	const { data: user } = useSWR<UserProfile>("/users/me", fetcher);
+	const isOperator = user?.role === "operator"
 	// Функция для удаления заявки
 	const handleDelete = async (issueId: number) => {
 		// Опционально: Добавить диалоговое окно подтверждения перед удалением
@@ -79,9 +87,7 @@ export const DashboardReportsPanel = () => {
 
 		try {
 			// Отправляем DELETE запрос на бэкенд
-			// Создаем объект URL из строки, используя переменную окружения для базового URL
-			const url = new URL(`/reports/${issueId}`);
-			const response = await fetcher(url, {
+			const response = await fetcher(`/reports/${issueId}`, {
 				method: 'DELETE',
 			});
 
@@ -107,17 +113,15 @@ export const DashboardReportsPanel = () => {
 	};
 
 	// Функция для изменения статуса заявки на "На рассмотрении" (statusId = 2)
-	const handleStartReview = async (issueId: number) => {
+	const handleSetStatus = async (issueId: number, status: number) => {
 		try {
 			// Отправляем PUT запрос на бэкенд для изменения статуса
-			// Создаем объект URL из строки, используя переменную окружения для базового URL
-			const url = new URL(`reports/${issueId}/status`);
-			const response = await fetcher(url, {
+			const response = await fetcher(`reports/${issueId}/status`, {
 				method: 'PUT',
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify({ statusId: 2 }), // Устанавливаем statusId = 2
+				body: JSON.stringify({ statusId: status }), // Устанавливаем statusId = 2
 			});
 
             // Проверяем ответ бэкенда
@@ -211,6 +215,17 @@ export const DashboardReportsPanel = () => {
 										{/* Добавлен flex-wrap для переноса кнопок на новую строку, если не помещаются */}
 										<TableCell className="flex flex-wrap gap-2">
 											{/* Кнопка "Удалить" */}
+											{(
+												issue.statusId === IssueStatuses.PENDING || 
+												issue.statusId === IssueStatuses.IN_WORK ) ? (
+											<Button
+												variant="destructive" // Красный цвет
+												size="sm"
+												onClick={() => handleSetStatus(issue.issueId, IssueStatuses.DECLINED)}
+											>
+												Отклонить
+											</Button>
+											) : (
 											<Button
 												variant="destructive" // Красный цвет для удаления
 												size="sm"
@@ -218,16 +233,35 @@ export const DashboardReportsPanel = () => {
 											>
 												Удалить
 											</Button>
-											{/* Кнопка "Начать рассмотрение" (отображаем только если статус != 2) */}
-											{issue.statusId !== 2 && (
-												<Button
-													variant="secondary" // Серый цвет
-													size="sm"
-													onClick={() => handleStartReview(issue.issueId)}
-												>
-													Начать рассмотрение
-												</Button>
 											)}
+											{!isOperator ? 
+												(issue.statusId === IssueStatuses.PENDING ? (
+													<Button
+														variant="secondary" // Серый цвет
+														size="sm"
+														onClick={() => handleSetStatus(issue.issueId, IssueStatuses.IN_WORK)}
+													>
+														Начать рассмотрение
+													</Button>
+												  ) : (
+													<Button
+														variant="secondary" // Серый цвет
+														size="sm"
+														onClick={() => handleSetStatus(issue.issueId, IssueStatuses.PENDING)}
+													>
+														Вернуть в обработку
+													</Button>
+												  )
+												) : issue.statusId === IssueStatuses.IN_WORK && (
+													<Button
+														variant="secondary" // Серый цвет
+														size="sm"
+														onClick={() => handleSetStatus(issue.issueId, IssueStatuses.FINISHED)}
+													>
+														Пометить как выполненную
+													</Button>
+												)
+											}
                                             {/* Кнопка "Подробнее" */}
 											<Button
 												variant="outline" // Белый контур

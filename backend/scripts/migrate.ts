@@ -24,6 +24,15 @@ await db.execute(
 await db.execute(
 	sql`insert into issue_statuses (name) values ('В обработке') on conflict (name) do nothing`,
 );
+await db.execute(
+	sql`insert into issue_statuses (name) values ('В работе') on conflict (name) do nothing`,
+);
+await db.execute(
+	sql`insert into issue_statuses (name) values ('Выполнена') on conflict (name) do nothing`,
+);
+await db.execute(
+	sql`insert into issue_statuses (name) values ('Отклонена') on conflict (name) do nothing`,
+);
 
 console.log("Seeding completed");
 process.exit(0);

@@ -148,7 +148,7 @@ export const DashboardCreateReport = () => {
 		try {
 			// Отправка данных на бэкенд с помощью fetcher
 			// Предполагается, что fetcher уже парсит JSON и обрабатывает базовые ошибки HTTP
-			const responseData = await fetcher("/reports", {
+			const responseData = await fetcher("/reports/", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",

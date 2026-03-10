@@ -15,6 +15,7 @@ import { Style, Icon } from "ol/style";
 import { useNavigate } from "react-router";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
+import { SquareX } from "lucide-react";
 
 // Определите тип для заявки с учетом данных пользователя и типа
 interface Report {
@@ -320,6 +321,21 @@ function DarkMapSPB() {
 					display: popupInfo ? 'block' : 'none'
 				}}
 			>
+				<div onClick={() => {
+					tempMarkerSourceRef.current.clear();
+					setPopupInfo(null)
+					// if(e.currentTarget.parentNode) {
+					// 	e.currentTarget.parentNode.setPosition(undefined);
+					// }
+				}}
+				style={{
+					position: "absolute",
+					top: "5px",
+					right: "5px"
+				}}
+				>
+					<SquareX />
+				</div>
 				{/* Проверяем, есть ли информация в popupInfo перед отображением содержимого */}
 				{popupInfo && (
 					<div>

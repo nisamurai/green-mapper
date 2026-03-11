@@ -15,6 +15,8 @@ import { Style, Icon } from "ol/style";
 import { useNavigate } from "react-router";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
+import { SquareX } from "lucide-react";
+import { FRONT_PATHS } from "@/types/paths";
 
 // Определите тип для заявки с учетом данных пользователя и типа
 interface Report {
@@ -281,7 +283,7 @@ function DarkMapSPB() {
 			const { coordinate } = popupInfo;
 
 			navigate(
-				`/dashboard/create-report?latitude=${coordinate[1]}&longitude=${coordinate[0]}`,
+				`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.CREATE_REPORT}?latitude=${coordinate[1]}&longitude=${coordinate[0]}`,
 			);
 		}
 	};
@@ -320,6 +322,21 @@ function DarkMapSPB() {
 					display: popupInfo ? 'block' : 'none'
 				}}
 			>
+				<div onClick={() => {
+					tempMarkerSourceRef.current.clear();
+					setPopupInfo(null)
+					// if(e.currentTarget.parentNode) {
+					// 	e.currentTarget.parentNode.setPosition(undefined);
+					// }
+				}}
+				style={{
+					position: "absolute",
+					top: "5px",
+					right: "5px"
+				}}
+				>
+					<SquareX />
+				</div>
 				{/* Проверяем, есть ли информация в popupInfo перед отображением содержимого */}
 				{popupInfo && (
 					<div>
@@ -335,7 +352,7 @@ function DarkMapSPB() {
 								<p>Создатель: {popupInfo.issue.userName || 'Неизвестно'}</p>
 								<p>Рейтинг создателя: {popupInfo.issue.userPoints !== null ? popupInfo.issue.userPoints : 'Нет данных'}</p>
 								{/* Опционально: кнопка для перехода к полной информации о заявке */}
-								{/* <button onClick={() => navigate(`/dashboard/reports/${popupInfo.issue.issueId}`)}>Подробнее</button> */}
+								{/* <button onClick={() => navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}/${popupInfo.issue.issueId}`)}>Подробнее</button> */}
 							</>
 						) : (
 							// Попап для создания новой заявки (клик по пустой области)

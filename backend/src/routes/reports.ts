@@ -17,6 +17,13 @@ const createReportBody = t.Object({
 export const reportsRouter = new Elysia({ prefix: "/reports" })
 	.use(authMiddleware)
 	.get("/", async ({ user }) => {
+		/*
+		TODO: query параметы на:
+		latitude, longitude, radius - выдавать заявки на заданном расстоянии от latitude и longitude
+		limit, skip - для подгрузки заявок по частям когда их станет много
+		userId - для получения своих заявок, и чтобы была возможность посмотреть не свои 
+		*/
+
 		// Запрос для получения списка заявок с данными пользователя
 		return db.select({
 			issueId: schema.issues.issueId,
@@ -37,7 +44,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 			.leftJoin(schema.user, eq(schema.issues.userId, schema.user.id))
 			.leftJoin(schema.issueStatuses, eq(schema.issues.statusId, schema.issueStatuses.statusId))
 			.leftJoin(schema.issueTypes, eq(schema.issues.typeId, schema.issueTypes.typeId));
-	}, { auth: true })
+	}, { auth: false })
 	.get(
 		"/:id",
 		async ({ params: { id }, status }) => {
@@ -130,8 +137,8 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
     // !!! НОВЫЙ ЭНДПОИНТ ДЛЯ УДАЛЕНИЯ ЗАЯВКИ (ТОЛЬКО ДЛЯ АДМИНА) !!!
     .delete("/:id", async ({ params: { id }, user, set }) => {
         // Проверяем, авторизован ли пользователь и является ли он админом
-        if (!user || user.role !== 'admin') {
-            set.status = 403; // Forbidden
+        if (!user || (user.role !== 'admin' && user.role !== "operator")) {
+			set.status = 403; // Forbidden
             return { error: "Forbidden" };
         }
 
@@ -161,33 +168,47 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
     // !!! НОВЫЙ ЭНДПОИНТ ДЛЯ ИЗМЕНЕНИЯ СТАТУСА ЗАЯВКИ (ТОЛЬКО ДЛЯ АДМИНА) !!!
     .put("/:id/status", async ({ params: { id }, body, user, set }) => {
         // Проверяем, авторизован ли пользователь и является ли он админом
-        if (!user || user.role !== 'admin') {
-            set.status = 403; // Forbidden
+        if (!user || (user.role !== 'admin' && user.role !== "operator")) {
+			set.status = 403; // Forbidden
             return { error: "Forbidden" };
         }
 
+		const { statusId } = body
+
         // Проверяем, что в теле запроса пришел корректный statusId
-        const updateStatusBody = t.Object({
-            statusId: t.Number()
-        });
+        // const updateStatusBody = t.Object({
+		// 	statusId: t.Number()
+        // });
 
-        const validationResult = updateStatusBody.safeParse(body);
+		// console.log(body)
+		// let validationResult
+		// try {
+		// 	validationResult = updateStatusBody.safeParse(body);
 
-        if (!validationResult.success) {
-            set.status = 400; // Bad Request
-            return { error: "Invalid request body. 'statusId' (number) is required." };
-        }
-
-        const { statusId } = validationResult.data;
+		// }
+		// catch (e) {
+		// 	console.log(e)
+		// }
+		
+        // if (!validationResult.success) {
+		// 	set.status = 400; // Bad Request
+        //     return { error: "Invalid request body. 'statusId' (number) is required." };
+        // }
+		
+        // const { statusId } = validationResult.data;
+		if(!id) {
+			    return { error: "Invalid request body. 'statusId' (number) is required." };
+		}
 
         // Опционально: Проверить, существует ли статус с таким ID в таблице issueStatuses
-        // const statusExists = await db.query.issueStatuses.findFirst({
-        //     where: eq(schema.issueStatuses.statusId, statusId)
-        // });
-        // if (!statusExists) {
-        //     set.status = 400;
-        //     return { error: `Status with ID ${statusId} not found.` };
-        // }
+        const statusExists = await db.query.issueStatuses.findFirst({
+            where: eq(schema.issueStatuses.statusId, statusId)
+        });
+		console.log("t", statusExists)
+        if (!statusExists) {
+            set.status = 400;
+            return { error: `Status with ID ${statusId} not found.` };
+        }
 
 
         try {
@@ -212,7 +233,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         }
     }, {
         params: t.Object({ id: t.Number() }),
-        body: t.Any(), // Используем t.Any() здесь, так как валидация тела происходит внутри
+        body: t.Object({ statusId: t.Number() }),
         auth: true // Требуется аутентификация
     });
 

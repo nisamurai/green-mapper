@@ -16,10 +16,9 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useNavigate, useLocation } from "react-router";
-import { authClient } from "@/lib/auth";
 import { fetcher } from "@/lib/fetcher";
 import useSWR from "swr";
-import type { User } from "better-auth/types";
+import { FRONT_PATHS } from "@/types/paths";
 
 export type UserProfile = {
 	id: number;
@@ -28,41 +27,54 @@ export type UserProfile = {
 	role: string;
 };
 
-const data = {
+export const PagesData = {
 	cities: ["Санкт-Петербург"],
 	navMain: [
 		{
 			title: "Навигация",
 			url: "#",
-			adminOnly: false,
+			accessedByUser: true,
+			accessedByAdmin: true,
+			accessedByOperator: true,
 			items: [
 				{
 					title: "Профиль",
-					url: "/dashboard/profile",
+					url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.PROFILE}`,
 					// isActive: true,
 				},
 				{
 					title: "Карта",
-					url: "/dashboard",
+					url: `/${FRONT_PATHS.APP}`,
 				},
 				{
 					title: "Заявки",
-					url: "/dashboard/reports",
+					url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}`,
 				},
 				{
 					title: "Создать заявку",
-					url: "/dashboard/create-report",
+					url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.CREATE_REPORT}`,
 				},
 			],
 		},
 		{
 			title: "Вкладки для Админа",
-			adminOnly: true,
+			accessedByAdmin: true,
 			url: "#",
 			items: [
 				{
 					title: "Панель управления заявками",
-					url: "/dashboard/reports-panel",
+					url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS_PANEL}`,
+				},
+			],
+		},
+		{
+			title: "Вкладки для Оператора",
+			accessedByOperator: true,
+			url: "#",
+			items: [
+				{
+					title: "Панель управления заявками",
+					url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS_PANEL}`,
 				},
 			],
 		},
@@ -93,17 +105,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 					Рейтинг: {!isNaN(user?.points!) ? user?.points : "Загрузка..."}
 				</span>
 				<VersionSwitcher
-					versions={data.cities}
-					defaultVersion={data.cities[0]}
+					versions={PagesData.cities}
+					defaultVersion={PagesData.cities[0]}
 				/>
 				<SearchForm />
 			</SidebarHeader>
 			<SidebarContent>
 				{/* We create a SidebarGroup for each parent. */}
-				{data.navMain
-					.filter(({ adminOnly }) =>
-						adminOnly ? user?.role === "admin" : true,
-					)
+				{PagesData.navMain
+					.filter(({ 
+						accessedByUser, 
+						accessedByAdmin, 
+						accessedByOperator
+					 }) => {
+						switch(user?.role) {
+							case "user": return !!accessedByUser
+							case "admin": return !!accessedByAdmin
+							case "operator": return !!accessedByOperator
+							default: return false
+						}
+					})
 					.map((item) => (
 						<SidebarGroup key={item.title}>
 							<SidebarGroupLabel>{item.title}</SidebarGroupLabel>

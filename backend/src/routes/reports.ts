@@ -17,6 +17,13 @@ const createReportBody = t.Object({
 export const reportsRouter = new Elysia({ prefix: "/reports" })
 	.use(authMiddleware)
 	.get("/", async ({ user }) => {
+		/*
+		TODO: query параметы на:
+		latitude, longitude, radius - выдавать заявки на заданном расстоянии от latitude и longitude
+		limit, skip - для подгрузки заявок по частям когда их станет много
+		userId - для получения своих заявок, и чтобы была возможность посмотреть не свои 
+		*/
+
 		// Запрос для получения списка заявок с данными пользователя
 		return db.select({
 			issueId: schema.issues.issueId,

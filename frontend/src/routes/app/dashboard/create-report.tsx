@@ -28,18 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import {
-	Breadcrumb,
-	BreadcrumbItem,
-	BreadcrumbLink,
-	BreadcrumbList,
-	BreadcrumbPage,
-	BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { authClient } from "@/lib/auth";
-import { Separator } from "@radix-ui/react-separator";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 
@@ -49,6 +38,7 @@ import { fetcher } from "@/lib/fetcher";
 
 // Импортируем toast из sonner
 import { toast } from "sonner";
+import { FRONT_PATHS } from "@/types/paths";
 
 // Тип для типов проблем, получаемых с бэкенда
 interface IssueType {
@@ -59,8 +49,6 @@ interface IssueType {
 export const DashboardCreateReport = () => {
 	const navigate = useNavigate();
 	const location = useLocation();
-	const [str, setStr] = useState("GreenMapper");
-
 	// Состояние для управления открытием выпадающего списка типов проблем
 	const [open, setOpen] = React.useState(false);
 	// Состояние для выбранного ID типа проблемы
@@ -107,7 +95,7 @@ export const DashboardCreateReport = () => {
 		setAddress("");
 		setFile(null);
 		// Можно также перенаправить пользователя обратно на карту, если нужно
-		// navigate('/dashboard');
+		// navigate(`/${FRONT_PATHS.APP}`);
 	};
 
 	// Function to handle form submission
@@ -161,7 +149,7 @@ export const DashboardCreateReport = () => {
 				toast.success("Заявка успешно создана!");
 				toast.success("Вам начислен +1 балл :)");
 				// Перенаправляем пользователя на страницу со списком заявок
-				navigate("/dashboard/reports");
+				navigate(`../${FRONT_PATHS.REPORTS}`);
 			} else {
 				// Если fetcher не выбросил ошибку, но issueId отсутствует,
 				// возможно, fetcher возвращает объект ошибки или null при неудаче,
@@ -192,31 +180,6 @@ export const DashboardCreateReport = () => {
 
 	return (
 		<>
-			<header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-				<SidebarTrigger className="-ml-1" />
-				<Separator orientation="vertical" className="mr-2 h-4" />
-				<Breadcrumb>
-					<BreadcrumbList>
-						<BreadcrumbItem className="hidden md:block">
-							<BreadcrumbLink onClick={() => setStr("Green Mapper")}>
-								{str}
-							</BreadcrumbLink>
-						</BreadcrumbItem>
-						<BreadcrumbSeparator className="hidden md:block" />
-						<BreadcrumbItem>
-							<BreadcrumbPage>Создать заявку</BreadcrumbPage>
-						</BreadcrumbItem>
-					</BreadcrumbList>
-				</Breadcrumb>
-				<Button
-					className="ml-auto"
-					onClick={() => {
-						authClient.signOut().then(() => navigate("/"));
-					}}
-				>
-					Выйти
-				</Button>
-			</header>
 			<div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
 				<Card className="w-full max-w-lg ">
 					<CardHeader>

@@ -16,10 +16,11 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth";
+import { FRONT_PATHS } from "@/types/paths";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -35,7 +36,6 @@ const schema = z.object({
 
 export const Login = () => {
 	const [isPending, setIsPending] = useState(false);
-
 	const form = useForm<Fields>({
 		resolver: zodResolver(schema),
 		defaultValues: {
@@ -43,13 +43,15 @@ export const Login = () => {
 			password: "",
 		},
 	});
+	const [searchParams] = useSearchParams();
+	const redirectTo = searchParams.get('redirect') || `/${FRONT_PATHS.APP}`;
 
 	const login = async ({ email, password }: Fields) => {
 		setIsPending(true);
 		const { error } = await authClient.signIn.email({
 			email,
 			password,
-			callbackURL: "/dashboard",
+			callbackURL: redirectTo,
 		});
 		setIsPending(false);
 
@@ -121,7 +123,7 @@ export const Login = () => {
 						</Form>
 						<div className="mt-4 text-center text-sm">
 							Ещё нет аккаунта?{" "}
-							<Link to="/auth/sign-up" className="underline underline-offset-4">
+							<Link to={`../${FRONT_PATHS.SING_UP}?redirect=${encodeURIComponent(redirectTo)}`} className="underline underline-offset-4">
 								Зарегистрироваться
 							</Link>
 						</div>

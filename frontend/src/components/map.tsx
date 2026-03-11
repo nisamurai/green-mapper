@@ -16,6 +16,7 @@ import { useNavigate } from "react-router";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { SquareX } from "lucide-react";
+import { FRONT_PATHS } from "@/types/paths";
 
 // Определите тип для заявки с учетом данных пользователя и типа
 interface Report {
@@ -282,7 +283,7 @@ function DarkMapSPB() {
 			const { coordinate } = popupInfo;
 
 			navigate(
-				`/dashboard/create-report?latitude=${coordinate[1]}&longitude=${coordinate[0]}`,
+				`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.CREATE_REPORT}?latitude=${coordinate[1]}&longitude=${coordinate[0]}`,
 			);
 		}
 	};
@@ -351,7 +352,7 @@ function DarkMapSPB() {
 								<p>Создатель: {popupInfo.issue.userName || 'Неизвестно'}</p>
 								<p>Рейтинг создателя: {popupInfo.issue.userPoints !== null ? popupInfo.issue.userPoints : 'Нет данных'}</p>
 								{/* Опционально: кнопка для перехода к полной информации о заявке */}
-								{/* <button onClick={() => navigate(`/dashboard/reports/${popupInfo.issue.issueId}`)}>Подробнее</button> */}
+								{/* <button onClick={() => navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}/${popupInfo.issue.issueId}`)}>Подробнее</button> */}
 							</>
 						) : (
 							// Попап для создания новой заявки (клик по пустой области)

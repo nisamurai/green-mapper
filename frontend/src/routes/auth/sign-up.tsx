@@ -21,7 +21,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "sonner";
-import { useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { FRONT_PATHS } from "@/types/paths";
 
 interface Fields {
 	name: string;
@@ -58,7 +59,6 @@ const schema = z
 export const SignUp = () => {
 	const [isPending, setIsPending] = useState(false);
 	const navigate = useNavigate();
-
 	const form = useForm<Fields>({
 		resolver: zodResolver(schema),
 		defaultValues: {
@@ -68,6 +68,8 @@ export const SignUp = () => {
 			confirm: "",
 		},
 	});
+	const [searchParams] = useSearchParams();
+	const redirectTo = searchParams.get('redirect') || `/${FRONT_PATHS.APP}`;
 
 	const signup = async ({ name, email, password }: Fields) => {
 		setIsPending(true);
@@ -75,11 +77,11 @@ export const SignUp = () => {
 			name,
 			email,
 			password,
-			callbackURL: "/dashboard",
+			callbackURL: redirectTo,
 			fetchOptions: {
 				onSuccess: (...params) => {
 					console.log(...params);
-					navigate("/dashboard", { replace: true });
+					navigate(redirectTo, { replace: true });
 				},
 			},
 		});
@@ -172,6 +174,12 @@ export const SignUp = () => {
 								</Button>
 							</form>
 						</Form>
+						<div className="mt-4 text-center text-sm">
+							Уже есть аккаунт?{" "}
+							<Link to={`../${FRONT_PATHS.LOGIN}?redirect=${encodeURIComponent(redirectTo)}`}className="underline underline-offset-4">
+								Войти
+							</Link>
+						</div>
 					</CardContent>
 				</Card>
 			</div>

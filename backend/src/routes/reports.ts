@@ -37,7 +37,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 			.leftJoin(schema.user, eq(schema.issues.userId, schema.user.id))
 			.leftJoin(schema.issueStatuses, eq(schema.issues.statusId, schema.issueStatuses.statusId))
 			.leftJoin(schema.issueTypes, eq(schema.issues.typeId, schema.issueTypes.typeId));
-	}, { auth: true })
+	}, { auth: false })
 	.get(
 		"/:id",
 		async ({ params: { id }, status }) => {

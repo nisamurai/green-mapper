@@ -1,34 +1,41 @@
-import { Navigate, Route } from "react-router";
-import { Routes } from "react-router";
-import { ThemeProvider } from "./components/theme-provider";
-import { SignUp } from "./routes/sign-up";
-import { Login } from "./routes/login";
+import { Navigate, Route, Routes } from "react-router";
+import { AppLayout } from "./components/app-layout";
 import { DashboardLayout } from "./components/dashboard-layout";
-import { DashboardHome } from "./routes/dashboard/home";
+import { ThemeProvider } from "./components/theme-provider";
 import { Toaster } from "./components/ui/sonner";
-import { DashboardReports } from "./routes/dashboard/reports";
-import { DashboardCreateReport } from "./routes/dashboard/create-report";
-import { DashboardReportsPanel } from "./routes/dashboard/reports-panel";
-import { DashboardProfile } from "./routes/dashboard/profile";
+import { FRONT_PATHS } from "./types/paths";
+import { 
+	DashboardCreateReport, 
+	DashboardProfile, 
+	DashboardReports, 
+	DashboardReportsPanel, 
+	Login, 
+	SignUp, 
+	Home 
+} from "./routes";
 
 function App() {
 	return (
 		<ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
 			<Routes>
-				<Route index element={<Navigate to="/dashboard" replace />} />
+				
+				<Route index element={<Navigate to={FRONT_PATHS.APP} replace />} />
 
-				<Route path="auth">
-					<Route path="login" element={<Login />} />
-					<Route path="sign-up" element={<SignUp />} />
+				<Route path={FRONT_PATHS.AUTH}>
+					<Route path={FRONT_PATHS.LOGIN} element={<Login />} />
+					<Route path={FRONT_PATHS.SING_UP} element={<SignUp />} />
 				</Route>
 
-				<Route path="dashboard" element={<DashboardLayout />}>
-					<Route index element={<DashboardHome />} />
-					<Route path="profile" element={<DashboardProfile />} />
-					<Route path="reports" element={<DashboardReports />} />
-					<Route path="create-report" element={<DashboardCreateReport />} />
-					<Route path="reports-panel" element={<DashboardReportsPanel />} />
+				<Route path={FRONT_PATHS.APP} element={<AppLayout />}>
+					<Route index element={<Home />} />
+					<Route path={FRONT_PATHS.DASHBOARD} element={<DashboardLayout />}>
+						<Route path={FRONT_PATHS.PROFILE} element={<DashboardProfile />} />
+						<Route path={FRONT_PATHS.REPORTS} element={<DashboardReports />} />
+						<Route path={FRONT_PATHS.CREATE_REPORT} element={<DashboardCreateReport />} />
+						<Route path={FRONT_PATHS.REPORTS_PANEL} element={<DashboardReportsPanel />} />
+					</Route>
 				</Route>
+				<Route path="*" element={<Navigate to="/" replace />}/>
 			</Routes>
 			<Toaster />
 		</ThemeProvider>

@@ -2,7 +2,7 @@ import { db } from "@/db/db";
 import { authMiddleware } from "@/middleware/auth";
 import Elysia, { t } from "elysia";
 import * as schema from "@/db/schema";
-import { eq, sql, and } from "drizzle-orm"; // Импортируем and для комбинирования условий
+import { and, gte, lte, sql, eq } from "drizzle-orm";
 
 const createReportBody = t.Object({
 	latitude: t.String(),
@@ -15,37 +15,113 @@ const createReportBody = t.Object({
 });
 
 export const reportsRouter = new Elysia({ prefix: "/reports" })
-	.use(authMiddleware)
-	.get("/", async ({ user }) => {
-		/*
-		TODO: query параметы на:
-		latitude, longitude, radius - выдавать заявки на заданном расстоянии от latitude и longitude
-		limit, skip - для подгрузки заявок по частям когда их станет много
-		userId - для получения своих заявок, и чтобы была возможность посмотреть не свои 
-		*/
+  .use(authMiddleware)
+  .get(
+    "/",
+    async ({ query }) => {
+      const {
+        latitude,
+        longitude,
+        distance,
+        limit,
+        skip,
+        userId
+      } = query;
 
-		// Запрос для получения списка заявок с данными пользователя
-		return db.select({
-			issueId: schema.issues.issueId,
-			shortDescription: schema.issues.shortDescription,
-			detailedDescription: schema.issues.detailedDescription,
-			address: schema.issues.address,
-			latitude: schema.issues.latitude,
-			longitude: schema.issues.longitude,
-			createdAt: schema.issues.createdAt,
-			expectedResolutionDate: schema.issues.expectedResolutionDate,
-			statusName: schema.issueStatuses.name,
-			typeName: schema.issueTypes.name,
-			userName: schema.user.name,
-			userPoints: schema.user.points,
-            statusId: schema.issues.statusId // Добавляем statusId для удобства на фронтенде
-		})
-			.from(schema.issues)
-			.leftJoin(schema.user, eq(schema.issues.userId, schema.user.id))
-			.leftJoin(schema.issueStatuses, eq(schema.issues.statusId, schema.issueStatuses.statusId))
-			.leftJoin(schema.issueTypes, eq(schema.issues.typeId, schema.issueTypes.typeId));
-	}, { auth: false })
-	.get(
+      const filters = [];
+
+      if (userId) {
+        filters.push(eq(schema.issues.userId, userId));
+      }
+
+      if (distance && distance > 0) {
+        
+          // Convert distance from kilometers to degrees (approximate)
+          // 1 degree of latitude ≈ 111 km
+          const latRange = distance / 111;
+          
+          if (latitude && latitude > 0) {
+              filters.push(
+                and(
+                  gte(schema.issues.latitude, (latitude - latRange).toString()),
+                  lte(schema.issues.latitude, (latitude + latRange).toString())
+                )
+              );
+            }
+          
+          if (longitude && longitude > 0) {
+              let lngRange = latRange;
+              
+              if (latitude && latitude > 0) {
+                  // Adjust longitude range based on latitude
+                  // cos(latitude in radians) * 111 km per degree at equator
+                  lngRange = distance / (111 * Math.cos(latitude * Math.PI / 180));
+              }
+              
+              filters.push(
+                and(
+                  gte(schema.issues.longitude, (longitude - lngRange).toString()),
+                  lte(schema.issues.longitude, (longitude + lngRange).toString())
+                )
+              );
+            }
+      }
+
+      const queryBuilder = db
+        .select({
+          issueId: schema.issues.issueId,
+          shortDescription: schema.issues.shortDescription,
+          detailedDescription: schema.issues.detailedDescription,
+          address: schema.issues.address,
+          latitude: schema.issues.latitude,
+          longitude: schema.issues.longitude,
+          createdAt: schema.issues.createdAt,
+          expectedResolutionDate: schema.issues.expectedResolutionDate,
+          statusName: schema.issueStatuses.name,
+          typeName: schema.issueTypes.name,
+          userName: schema.user.name,
+          userPoints: schema.user.points,
+          statusId: schema.issues.statusId
+        })
+        .from(schema.issues)
+        .leftJoin(schema.user, eq(schema.issues.userId, schema.user.id))
+        .leftJoin(schema.issueStatuses, eq(schema.issues.statusId, schema.issueStatuses.statusId))
+        .leftJoin(schema.issueTypes, eq(schema.issues.typeId, schema.issueTypes.typeId))
+        .where(filters.length > 0 ? and(...filters) : undefined);
+
+      // Apply pagination
+      const paginatedQuery = (limit !== undefined && limit !== null)
+        ? queryBuilder.limit(limit).offset(skip || 0)
+        : queryBuilder;
+
+      const reports = await paginatedQuery;
+
+      return reports;
+    },
+    {
+      auth: false,
+      query: t.Object({
+        latitude: t.Optional(t.Numeric()),
+        longitude: t.Optional(t.Numeric()),
+        distance: t.Optional(t.Numeric({
+          description: "Distance in kilometers for bounding box"
+        })),
+        
+        limit: t.Optional(t.Numeric({
+          minimum: 0,
+          description: "Number of items to return (if omitted, returns all)"
+        })),
+        skip: t.Optional(t.Numeric({
+          minimum: 0,
+          description: "Number of items to skip (only used with limit)"
+        })),
+        
+        userId: t.Optional(t.String({
+          description: "Filter by user ID"
+        }))
+      })
+    }
+  ).get(
 		"/:id",
 		async ({ params: { id }, status }) => {
 			// Запрос для получения одной заявки по ID (может быть расширен при необходимости)

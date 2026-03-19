@@ -20,7 +20,7 @@ import { FRONT_PATHS } from "@/types/paths";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -36,6 +36,7 @@ const schema = z.object({
 
 export const Login = () => {
 	const [isPending, setIsPending] = useState(false);
+	const navigate = useNavigate();
 	const form = useForm<Fields>({
 		resolver: zodResolver(schema),
 		defaultValues: {
@@ -48,11 +49,26 @@ export const Login = () => {
 
 	const login = async ({ email, password }: Fields) => {
 		setIsPending(true);
-		const { error } = await authClient.signIn.email({
-			email,
-			password,
-			callbackURL: redirectTo,
-		});
+		const { error } = await authClient.signIn.email(
+			{
+				email,
+				password,
+				callbackURL: redirectTo,
+			},
+			{
+				async onSuccess(ctx) {
+					if (ctx?.data?.twoFactorRedirect) {
+						sessionStorage.setItem("postLoginRedirect", redirectTo);
+						navigate(
+							`../${FRONT_PATHS.TWO_FACTOR}?redirect=${encodeURIComponent(redirectTo)}`,
+							{
+								replace: true,
+							},
+						);
+					}
+				},
+			},
+		);
 		setIsPending(false);
 
 		if (error) {
@@ -60,6 +76,18 @@ export const Login = () => {
 			else toast("Ошибка");
 		}
 	};
+
+	const loginWithVk = async () => {
+    	setIsPending(true);
+    	const { error } = await authClient.signIn.social({
+      		provider: "vk",
+      		callbackURL: redirectTo,
+    		});
+    	if (error) {
+      		setIsPending(false);
+      		toast("Ошибка входа через VK");
+    	}
+  	};
 
 	return (
 		<div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
@@ -117,8 +145,8 @@ export const Login = () => {
 									Войти
 								</Button>
 							</form>
-							<Button className="w-full mt-4 bg-blue-600 text-white hover:bg-blue-700">
-								Войти при помощи Госуслуг
+							<Button onClick={loginWithVk} disabled={isPending} className="w-full mt-4 bg-blue-600 text-white hover:bg-blue-700">
+								Войти при помощи VK
 							</Button>
 						</Form>
 						<div className="mt-4 text-center text-sm">

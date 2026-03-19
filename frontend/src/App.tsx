@@ -10,6 +10,7 @@ import {
 	DashboardReports, 
 	DashboardReportsPanel, 
 	Login, 
+	TwoFactor,
 	SignUp, 
 	Home 
 } from "./routes";
@@ -24,6 +25,7 @@ function App() {
 				<Route path={FRONT_PATHS.AUTH}>
 					<Route path={FRONT_PATHS.LOGIN} element={<Login />} />
 					<Route path={FRONT_PATHS.SING_UP} element={<SignUp />} />
+					<Route path={FRONT_PATHS.TWO_FACTOR} element={<TwoFactor />} />
 				</Route>
 
 				<Route path={FRONT_PATHS.APP} element={<AppLayout />}>

@@ -20,6 +20,7 @@ export const user = authSchema.table("user", {
 	name: text("name").notNull(),
 	email: text("email").notNull().unique(),
 	emailVerified: boolean("email_verified").notNull(),
+	twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
 	image: text("image"),
 	createdAt: timestamp("created_at").notNull(),
 	updatedAt: timestamp("updated_at").notNull(),
@@ -65,6 +66,15 @@ export const verification = authSchema.table("verification", {
 	expiresAt: timestamp("expires_at").notNull(),
 	createdAt: timestamp("created_at"),
 	updatedAt: timestamp("updated_at"),
+});
+
+export const twoFactor = authSchema.table("twoFactor", {
+	id: text("id").primaryKey(),
+	userId: text("user_id")
+		.notNull()
+		.references(() => user.id, { onDelete: "cascade" }),
+	secret: text("secret").notNull(),
+	backupCodes: text("backup_codes").notNull(),
 });
 
 export const issueTypes = pgTable("issue_types", {

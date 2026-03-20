@@ -2,7 +2,7 @@ import { db } from "@/db/db";
 import { authMiddleware } from "@/middleware/auth";
 import Elysia, { t } from "elysia";
 import * as schema from "@/db/schema";
-import { and, gte, lte, sql, eq } from "drizzle-orm";
+import { and, gte, lte, sql, eq, or } from "drizzle-orm";
 
 const createReportBody = t.Object({
 	latitude: t.String(),
@@ -40,7 +40,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
           // 1 degree of latitude ≈ 111 km
           const latRange = distance / 111;
           
-          if (latitude && latitude > 0) {
+          if (latitude && !isNaN(latitude)) {
               filters.push(
                 and(
                   gte(schema.issues.latitude, (latitude - latRange).toString()),
@@ -49,19 +49,39 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
               );
             }
           
-          if (longitude && longitude > 0) {
+          if (longitude && !isNaN(longitude)) {
               let lngRange = latRange;
               
-              if (latitude && latitude > 0) {
+              if (latitude && !isNaN(longitude)) {
                   // Adjust longitude range based on latitude
                   // cos(latitude in radians) * 111 km per degree at equator
                   lngRange = distance / (111 * Math.cos(latitude * Math.PI / 180));
               }
-              
+              const leftCond = (
+                longitude - lngRange < -180
+                 ?
+                  or(
+                   gte(schema.issues.longitude, (longitude - lngRange).toString())
+                   ,
+                   gte(schema.issues.longitude, (longitude - lngRange+360).toString())
+                  )
+                 :
+                  gte(schema.issues.longitude, (longitude - lngRange).toString()));
+
+              const rightCond = (
+                longitude + lngRange > 180
+                 ?
+                  or(
+                   lte(schema.issues.longitude, (longitude + lngRange).toString())
+                   ,
+                   lte(schema.issues.longitude, (longitude + lngRange-360).toString())
+                  )
+                 :
+                  lte(schema.issues.longitude, (longitude + lngRange).toString()));
               filters.push(
                 and(
-                  gte(schema.issues.longitude, (longitude - lngRange).toString()),
-                  lte(schema.issues.longitude, (longitude + lngRange).toString())
+                  leftCond,
+                  rightCond
                 )
               );
             }

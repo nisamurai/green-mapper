@@ -9,7 +9,8 @@ import {
 	text,
 	timestamp,
 	varchar,
-  pgSchema
+  pgSchema,
+  index
 } from "drizzle-orm/pg-core";
 
 const authSchema = pgSchema("auth");
@@ -105,7 +106,10 @@ export const issues = pgTable("issues", {
   longitude: decimal("longitude", { precision: 11, scale: 8 }),
   createdAt: timestamp("created_at").defaultNow(),
   expectedResolutionDate: date("expected_resolution_date"),
-});
+}, (table) => ({
+  latitude_index: index("latitude_index").on(table.latitude),
+  longitude_index: index("longitude_index").on(table.longitude),
+}));
 
 // Фотографии
 export const photos = pgTable("photos", {

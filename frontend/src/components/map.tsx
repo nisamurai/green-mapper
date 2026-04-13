@@ -88,10 +88,11 @@ function DarkMapSPB() {
             if (clientWidth > 0 && clientHeight > 0) {
                 console.log("Map target has dimensions, initializing map...");
 
-                const extentSPB = [
-                    ...fromLonLat([29.7, 59.7]),
-                    ...fromLonLat([30.5, 60.1]),
-                ];
+				const extentSPB = [
+					// Примерный bbox для Российской Федерации (без учёта anti-meridian wrap)
+					...fromLonLat([19.6389, 41.185]), // запад/юг (Калининград / юг РФ)
+					...fromLonLat([180, 82.0]), // восток (до 180°) / север (мыс Челюскин)
+				];
 
                 const map = new Map({
                     target: currentMapTarget,

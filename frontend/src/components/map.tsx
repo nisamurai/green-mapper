@@ -17,6 +17,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { SquareX } from "lucide-react";
 import { FRONT_PATHS } from "@/types/paths";
+import { QuickReportButton } from "./quick-report-button";
 
 // Определите тип для заявки с учетом данных пользователя и типа
 interface Report {
@@ -303,6 +304,13 @@ function DarkMapSPB() {
 		<div style={{ width: "100%", height: "100%", position: "relative" }}>
 			{/* Элемент, куда будет рендериться карта OpenLayers */}
 			<div id="map" ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
+
+			{/* Кнопка быстрого отчёта - только на мобильных устройствах */}
+			<div
+				className="fixed bottom-6 left-6 z-40 md:hidden"
+			>
+				<QuickReportButton />
+			</div>
 
 			{/* Попап для отображения информации о заявке или создания новой */}
 			<div

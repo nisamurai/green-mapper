@@ -77,15 +77,15 @@ export const Login = () => {
 		}
 	};
 
-	const loginWithVk = async () => {
+	const loginWithYandex = async () => {
     	setIsPending(true);
-    	const { error } = await authClient.signIn.social({
-      		provider: "vk",
-      		callbackURL: redirectTo,
-    		});
+		const { error } = await authClient.signIn.social({
+			provider: "yandex",
+			callbackURL: `${window.location.origin}${redirectTo}`,
+		});
     	if (error) {
       		setIsPending(false);
-      		toast("Ошибка входа через VK");
+      		toast("Ошибка входа через Yandex");
     	}
   	};
 
@@ -145,8 +145,8 @@ export const Login = () => {
 									Войти
 								</Button>
 							</form>
-							<Button onClick={loginWithVk} disabled={isPending} className="w-full mt-4 bg-blue-600 text-white hover:bg-blue-700">
-								Войти при помощи VK
+							<Button onClick={loginWithYandex} disabled={isPending} className="w-full mt-4 bg-red-600 text-white hover:bg-red-700">
+								Войти через Яндекс
 							</Button>
 						</Form>
 						<div className="mt-4 text-center text-sm">

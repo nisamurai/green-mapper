@@ -101,7 +101,8 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
           typeName: schema.issueTypes.name,
           userName: schema.user.name,
           userPoints: schema.user.points,
-          statusId: schema.issues.statusId
+          statusId: schema.issues.statusId,
+          userId: schema.issues.userId
         })
         .from(schema.issues)
         .leftJoin(schema.user, eq(schema.issues.userId, schema.user.id))

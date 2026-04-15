@@ -1,7 +1,8 @@
 import { format, subHours } from "date-fns";
 import { ru } from "date-fns/locale";
-
+import { useState } from "react";
 import useSWR from "swr";
+import { authClient } from "@/lib/auth";
 import { fetcher } from "@/lib/fetcher";
 import type { Report } from "@/types/report";
 import {
@@ -13,15 +14,42 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 
 export const DashboardReports = () => {
-	const { data } = useSWR<Report[]>("/reports/", fetcher);
+	const [showMyOnly, setShowMyOnly] = useState(false);
+	const { data: session } = authClient.useSession();
+	
+	const { data: allReports } = useSWR<Report[]>("/reports/", fetcher);
+	
+	// Filter reports based on the toggle
+	const filteredReports = showMyOnly && session?.user
+		? allReports?.filter(report => report.userId === session.user.id)
+		: allReports;
 
 	return (
 		<>
 			{/* Контейнер, который будет прокручиваться по горизонтали при необходимости */}
 			{/* flex-1 позволяет ему занимать все доступное пространство по вертикали */}
 			<div className="flex flex-1 flex-col gap-4 p-4 overflow-x-auto">
+				{/* Фильтр для переключения между всеми заявками и своими */}
+				<div className="flex gap-2 mb-4">
+					<Button
+						variant={!showMyOnly ? "default" : "outline"}
+						size="sm"
+						onClick={() => setShowMyOnly(false)}
+					>
+						Все заявки
+					</Button>
+					<Button
+						variant={showMyOnly ? "default" : "outline"}
+						size="sm"
+						onClick={() => setShowMyOnly(true)}
+					>
+						Мои заявки
+					</Button>
+				</div>
+				
 				{/* Таблица с фиксированной раскладкой и полной шириной контейнера */}
 				{/* Это позволяет контролировать ширину столбцов и использовать overflow-x-auto на родительском элементе */}
 				<Table className="w-full min-w-[900px] md:table-fixed">
@@ -59,7 +87,7 @@ export const DashboardReports = () => {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{data?.map(
+						{filteredReports?.map(
 							({
 								issueId,
 								statusName,

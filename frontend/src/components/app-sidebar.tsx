@@ -28,7 +28,7 @@ export type UserProfile = {
 };
 
 export const PagesData = {
-	cities: ["Санкт-Петербург"],
+	locations: ["Российская Федерация"],
 	navMain: [
 		{
 			title: "Навигация",
@@ -49,10 +49,6 @@ export const PagesData = {
 				{
 					title: "Заявки",
 					url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}`,
-				},
-				{
-					title: "Создать заявку",
-					url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.CREATE_REPORT}`,
 				},
 			],
 		},
@@ -105,8 +101,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 					Рейтинг: {!isNaN(user?.points!) ? user?.points : "Загрузка..."}
 				</span>
 				<VersionSwitcher
-					versions={PagesData.cities}
-					defaultVersion={PagesData.cities[0]}
+					versions={PagesData.locations}
+					defaultVersion={PagesData.locations[0]}
 				/>
 				<SearchForm />
 			</SidebarHeader>

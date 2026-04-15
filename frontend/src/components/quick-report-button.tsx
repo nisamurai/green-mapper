@@ -78,20 +78,22 @@ export function QuickReportButton(
         }
     };
 
-    const navigateToCreateReportWithPhoto = async (file: File) => {
+    const navigateToCreateReportWithPhoto = async (file: File, coords: { latitude: string; longitude: string } | null = null) => {
         const path = "/app/dashboard/create-report";
 
-        if (capturedCoords?.latitude && capturedCoords?.longitude) {
+        // Используем переданные координаты напрямую (из takePhoto)
+        if (coords?.latitude && coords?.longitude) {
             navigate(path, {
                 state: {
                     photo: file,
-                    latitude: capturedCoords.latitude,
-                    longitude: capturedCoords.longitude,
+                    latitude: coords.latitude,
+                    longitude: coords.longitude,
                 },
             });
             return;
         }
 
+        // Fallback: пробуем получить координаты заново
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -131,7 +133,7 @@ export function QuickReportButton(
         if (!file) {
             return;
         }
-        navigateToCreateReportWithPhoto(file);
+        navigateToCreateReportWithPhoto(file, null);
     };
 
     const closeCamera = () => {
@@ -151,10 +153,16 @@ export function QuickReportButton(
             setCapturedCoords(coords);
         } catch (error) {
             console.error("Ошибка получения координат:", error);
-            // Продолжаем без координат - они загрузятся позже
+            // Показываем сообщение об ошибке и закрываем камеру
+            closeCamera();
+            setErrorMessage(
+                "Не удалось получить ваше местоположение. Разрешите доступ к геолокации в браузере и попробуйте снова.",
+            );
+            setRedirectToMapOnDismiss(true);
+            return;
         }
 
-        // Затем делаем снимок
+        // Делаем снимок только если координаты получены успешно
         if (videoRef.current) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -166,11 +174,8 @@ export function QuickReportButton(
                     if (blob) {
                         const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
                         closeCamera();
-                        // Передаём координаты в state для навигации
-                        if (coords) {
-                            setCapturedCoords(coords);
-                        }
-                        navigateToCreateReportWithPhoto(file);
+                        // Передаём координаты напрямую в функцию навигации
+                        navigateToCreateReportWithPhoto(file, coords);
                     }
                 }, 'image/jpeg');
             }

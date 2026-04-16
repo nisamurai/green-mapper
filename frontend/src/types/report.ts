@@ -12,4 +12,5 @@ export type Report = {
 	expectedResolutionDate: string | null;
 	statusName: string;
 	typeName: string;
+	userId: string | null;
 };

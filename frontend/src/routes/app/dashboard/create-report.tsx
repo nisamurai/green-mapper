@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router";
 
 import useSWR from "swr";
@@ -44,6 +44,13 @@ import { FRONT_PATHS } from "@/types/paths";
 interface IssueType {
 	typeId: number;
 	name: string;
+}
+
+// Тип для данных, передаваемых через location.state
+interface CreateReportState {
+	photo?: File;
+	latitude?: string | number;
+	longitude?: string | number;
 }
 
 export const DashboardCreateReport = () => {
@@ -70,9 +77,34 @@ export const DashboardCreateReport = () => {
 	const [detailedDescription, setDetailedDescription] = useState("");
 	const [address, setAddress] = useState("");
 	const [file, setFile] = useState<File | null>(null); // Состояние для файла
+	const [photoPreview, setPhotoPreview] = useState<string | null>(null); // Превью фото
+	const [isFromQuickReport, setIsFromQuickReport] = useState(false); // Флаг быстрого отчёта
+	const fileInputRef = useRef<HTMLInputElement>(null);
 
-	// Read coordinates from URL parameters on component mount
+	// Read coordinates from URL parameters and location.state on component mount
 	useEffect(() => {
+		// Приоритет 1: Данные из location.state (быстрый отчёт с фото)
+		const state = location.state as CreateReportState | null;
+		if (state) {
+			if (state.latitude !== undefined) {
+				setLatitude(String(state.latitude));
+			}
+			if (state.longitude !== undefined) {
+				setLongitude(String(state.longitude));
+			}
+			if (state.photo) {
+				setFile(state.photo);
+				// Создаём превью для переданного фото
+				const previewUrl = URL.createObjectURL(state.photo);
+				setPhotoPreview(previewUrl);
+				setIsFromQuickReport(true);
+			}
+			// Очищаем state после использования, чтобы при возврате не было проблем
+			navigate(location.pathname + location.search, { replace: true });
+			return;
+		}
+
+		// Приоритет 2: Координаты из URL параметров (клик по карте)
 		const params = new URLSearchParams(location.search);
 		const lat = params.get("latitude");
 		const lon = params.get("longitude");
@@ -83,7 +115,16 @@ export const DashboardCreateReport = () => {
 		if (lon) {
 			setLongitude(lon);
 		}
-	}, [location.search]);
+	}, [location.search, location.state, navigate]);
+
+	// Очистка URL превью при размонтировании
+	useEffect(() => {
+		return () => {
+			if (photoPreview) {
+				URL.revokeObjectURL(photoPreview);
+			}
+		};
+	}, [photoPreview]);
 
 	// Function to clear all form fields
 	const handleCancel = () => {
@@ -304,14 +345,29 @@ export const DashboardCreateReport = () => {
 								</div>
 								<div className="grid w-full max-w-sm items-center gap-2.5 min-w-0">
 									<Label htmlFor="picture">Фото</Label>
-									<Input
-										id="picture"
-										type="file"
-										onChange={(e) =>
-											setFile(e.target.files ? e.target.files[0] : null)
-										}
-									/>
-									{/* Пока не обрабатываем загрузку файла на бэкенде */}
+									{photoPreview ? (
+										<div className="relative w-full">
+											<img
+												src={photoPreview}
+												alt="Предпросмотр фото"
+												className="w-full h-auto rounded-md border"
+											/>
+											{isFromQuickReport && (
+												<p className="text-xs text-green-600 mt-1">
+													✓ Фото загружено с камеры
+												</p>
+											)}
+										</div>
+									) : (
+										<Input
+											id="picture"
+											type="file"
+											accept="image/*"
+											onChange={(e) =>
+												setFile(e.target.files ? e.target.files[0] : null)
+											}
+										/>
+									)}
 								</div>
 							</div>
 						</form>

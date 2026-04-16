@@ -64,4 +64,6 @@ const app = new Elysia()
 	.listen(3000);
 
 console.log(`Started at ${app.server?.hostname}:${app.server?.port}`);
-createBucketInNotExist()
+setTimeout(() => {
+	createBucketInNotExist()
+}, 1000)

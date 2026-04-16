@@ -1,9 +1,19 @@
 import { auth } from "@/utils/auth";
+import { createBucketInNotExist } from "@/utils/minio";
 import { Elysia } from "elysia";
 import { swaggerMiddleware } from "./middleware/swagger";
 import { cors } from "@elysiajs/cors";
 import { reportsRouter } from "./routes/reports";
 import { usersRouter } from "./routes/users";
+import * as Minio from 'minio';
+
+export const minioClient = new Minio.Client({
+  endPoint: process.env.IN_CONTAINER ? "minio" : 'localhost', // IP or hostname
+  port: 9000,
+  useSSL: false, 
+  accessKey: process.env.MINIO_ROOT_USER, 
+  secretKey: process.env.MINIO_ROOT_PASSWORD
+});
 
 const app = new Elysia()
 	.use(
@@ -54,3 +64,4 @@ const app = new Elysia()
 	.listen(3000);
 
 console.log(`Started at ${app.server?.hostname}:${app.server?.port}`);
+createBucketInNotExist()

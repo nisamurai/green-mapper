@@ -15,7 +15,7 @@ import { Style, Icon } from "ol/style";
 import { useNavigate } from "react-router";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { SquareX } from "lucide-react";
+import { EyeIcon, SquareX } from "lucide-react";
 import { FRONT_PATHS } from "@/types/paths";
 import { QuickReportButton } from "./quick-report-button";
 
@@ -343,9 +343,24 @@ function DarkMapSPB() {
 					top: "5px",
 					right: "5px"
 				}}
+				title="закрыть"
 				>
 					<SquareX />
 				</div>
+				{popupInfo?.issue && (
+					<div onClick={() => {
+						navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}/${popupInfo.issue.issueId}`);
+					}}
+					style={{
+						position: "absolute",
+						top: "35px",
+						right: "5px"
+					}}
+					title="подробнее"
+					>
+						<EyeIcon />
+					</div>
+				)}
 				{/* Проверяем, есть ли информация в popupInfo перед отображением содержимого */}
 				{popupInfo && (
 					<div>

@@ -45,6 +45,7 @@ import {
 // Импортируем toast из sonner
 import { toast } from "sonner";
 import type { UserProfile } from "./profile";
+import { FRONT_PATHS } from "@/types/paths";
 
 // Импортируем компоненты для диалогового окна подтверждения удаления (опционально, но рекомендуется)
 // import {
@@ -65,6 +66,7 @@ export const DashboardReportsPanel  = () => {
 	const { data: issues, error, isLoading } = useSWR<Report[]>("/reports/", fetcher);
 	const { data: user } = useSWR<UserProfile>("/users/me", fetcher);
 	const isOperator = user?.role === "operator"
+	const navigate = useNavigate();
 	// Функция для удаления заявки
 	const handleDelete = async (issueId: number) => {
 		// Опционально: Добавить диалоговое окно подтверждения перед удалением
@@ -137,10 +139,10 @@ export const DashboardReportsPanel  = () => {
 	const handleDetails = (issueId: number) => {
 		console.log(`Кнопка "Подробнее" нажата для заявки #${issueId}`);
 		// Здесь можно добавить логику для перехода на страницу с подробной информацией о заявке
-		// navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}/${issueId}`);
+		navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}/${issueId}`);
 
 		// Показать уведомление о нажатии кнопки "Подробнее"
-		toast.info(`Нажата кнопка "Подробнее" для заявки #${issueId}`);
+		// toast.info(`Нажата кнопка "Подробнее" для заявки #${issueId}`);
 	};
 
 

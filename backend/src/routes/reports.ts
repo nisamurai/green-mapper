@@ -3,15 +3,16 @@ import { authMiddleware } from "@/middleware/auth";
 import Elysia, { t } from "elysia";
 import * as schema from "@/db/schema";
 import { and, gte, lte, sql, eq, or } from "drizzle-orm";
+import { putIntoBucketMultiple, removeFromBucketMultiple } from "@/utils/minio";
 
 const createReportBody = t.Object({
 	latitude: t.String(),
 	longitude: t.String(),
-	typeId: t.Number(),
+	typeId: t.Numeric(),
 	shortDescription: t.String(),
 	detailedDescription: t.Optional(t.String()),
 	address: t.String(),
-	// file: t.Optional(t.File()), // Закомментировано, так как пока не обрабатывается
+	files: t.Optional(t.Files()), 
 });
 
 export const reportsRouter = new Elysia({ prefix: "/reports" })
@@ -102,7 +103,15 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
           userName: schema.user.name,
           userPoints: schema.user.points,
           statusId: schema.issues.statusId,
-          userId: schema.issues.userId
+          userId: schema.issues.userId,
+          links: sql<string[]>`(
+                SELECT COALESCE(
+                  json_agg(${schema.photos.filePath}),
+                  '[]'::json
+                )
+                FROM ${schema.photos} 
+                WHERE ${schema.photos.issueId} = ${schema.issues.issueId}
+              )`
         })
         .from(schema.issues)
         .leftJoin(schema.user, eq(schema.issues.userId, schema.user.id))
@@ -146,7 +155,36 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 		"/:id",
 		async ({ params: { id }, status }) => {
 			// Запрос для получения одной заявки по ID (может быть расширен при необходимости)
-			const report = await db.query.issues.findFirst({ where: eq(schema.issues.issueId, id) })
+			const report = await db.select({
+          issueId: schema.issues.issueId,
+          shortDescription: schema.issues.shortDescription,
+          detailedDescription: schema.issues.detailedDescription,
+          address: schema.issues.address,
+          latitude: schema.issues.latitude,
+          longitude: schema.issues.longitude,
+          createdAt: schema.issues.createdAt,
+          expectedResolutionDate: schema.issues.expectedResolutionDate,
+          statusName: schema.issueStatuses.name,
+          typeName: schema.issueTypes.name,
+          userName: schema.user.name,
+          userPoints: schema.user.points,
+          statusId: schema.issues.statusId,
+          userId: schema.issues.userId,
+          links: sql<string[]>`(
+                SELECT COALESCE(
+                  json_agg(${schema.photos.filePath}),
+                  '[]'::json
+                )
+                FROM ${schema.photos} 
+                WHERE ${schema.photos.issueId} = ${schema.issues.issueId}
+              )`
+        })
+        .from(schema.issues)
+        .leftJoin(schema.user, eq(schema.issues.userId, schema.user.id))
+        .leftJoin(schema.issueStatuses, eq(schema.issues.statusId, schema.issueStatuses.statusId))
+        .leftJoin(schema.issueTypes, eq(schema.issues.typeId, schema.issueTypes.typeId))
+        .where(eq(schema.issues.issueId, id))
+        .limit(1);
 
 			if (!report)
 				return status('Not Found')
@@ -161,7 +199,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 	}, { auth: true })
 	.post("/", async ({ body, user, set }) => {
 		// Обработчик создания новой заявки
-		const { latitude, longitude, typeId, shortDescription, detailedDescription, address } = body;
+		const { latitude, longitude, typeId, shortDescription, detailedDescription, address, files } = body;
 
 		// Проверяем, авторизован ли пользователь
 		if (!user) {
@@ -206,6 +244,27 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 					return { error: "Failed to create report." };
 				}
 
+        let paths: string[] = []
+        if (files) {
+          paths = await putIntoBucketMultiple(files, newIssue[0].issueId)
+        }
+        
+        const newPhotos = await tx.insert(schema.photos).values(
+          paths.map(path => ({
+          issueId: newIssue[0].issueId,
+          filePath: path,
+          uploadedAt: new Date()
+        }))).returning()
+        
+        // Проверяем, успешно ли добавлены фото
+        if (newPhotos.length !== paths.length) {
+          console.error("failed to add photos")
+          await removeFromBucketMultiple(newPhotos.map(el => el.filePath))
+          set.status = 500;
+          tx.rollback();
+          return { error: "Failed to create report." };
+        }
+        
 				// Добавляем 1 балл к рейтингу пользователя
 				await tx.update(schema.user)
 					.set({ points: sql`${schema.user.points} + 1` })
@@ -239,25 +298,40 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
             return { error: "Forbidden" };
         }
 
-        try {
-            // Удаляем заявку по ID
-            const deletedIssues = await db.delete(schema.issues)
+       try {
+        let deletedIssueId: number | null = null;
+        
+        await db.transaction(async (tx) => {
+            
+            const pictures = await tx.delete(schema.photos).where(eq(schema.photos.issueId, id)).returning({link: schema.photos.filePath});
+            
+            await removeFromBucketMultiple(pictures.map(p => p.link))
+
+            const deletedIssues = await tx.delete(schema.issues)
                 .where(eq(schema.issues.issueId, id))
-                .returning({ issueId: schema.issues.issueId }); // Возвращаем ID удаленной заявки
-
+                .returning({ issueId: schema.issues.issueId });
+            
             if (deletedIssues.length === 0) {
-                set.status = 404; // Not Found
-                return { error: `Issue with ID ${id} not found.` };
+                throw new Error(`Issue with ID ${id} not found.`);
             }
-
-            set.status = 200; // OK
-            return { success: true, issueId: deletedIssues[0].issueId };
-
-        } catch (error) {
-            console.error(`Error deleting issue with ID ${id}:`, error);
-            set.status = 500;
-            return { error: "Internal server error." };
+            
+            deletedIssueId = deletedIssues[0].issueId;
+        });
+        
+        set.status = 200;
+        return { success: true, issueId: deletedIssueId };
+        
+    } catch (error) {
+        console.error(`Error deleting issue with ID ${id}:`, error);
+        
+        if (error instanceof Error && error.message.includes(`Issue with ID ${id} not found`)) {
+            set.status = 404;
+            return { error: `Issue with ID ${id} not found.` };
         }
+        
+        set.status = 500;
+        return { error: "Internal server error." };
+    }
     }, {
         params: t.Object({ id: t.Number() }),
         auth: true // Требуется аутентификация

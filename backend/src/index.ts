@@ -18,7 +18,7 @@ export const minioClient = new Minio.Client({
 const app = new Elysia()
 	.use(
 		cors({
-			origin: "http://localhost:5173",
+			origin: process.env.CORS_ORIGIN,
 			methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 			credentials: true,
 			allowedHeaders: ["Content-Type", "Authorization"],
@@ -56,6 +56,9 @@ const app = new Elysia()
 			} catch (err: any) {
 				return new Response(JSON.stringify({ error: err?.message || String(err) }), { status: 500, headers: { "Content-Type": "application/json" } });
 			}
+	})
+	.get("/health", async () => {
+		return {status: "ok"}
 	})
 	.use(swaggerMiddleware)
 	.mount(auth.handler)

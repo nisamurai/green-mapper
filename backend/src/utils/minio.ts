@@ -28,13 +28,20 @@ export async function createBucketInNotExist(bucket: string = bucketName) {
 
   return
 }
+
+/**
+  @param path указывать без слэша в начале!!!
+*/
 export async function putIntoBucket(file: File, issueId: number, bucket: string = bucketName, path: string = "report_photos") {
   const name = `${path}/${issueId}/${crypto.randomUUID()}.${file.name.split(".").pop()}`;
   const data = await minioClient.putObject(bucket, name, Buffer.from(await file.arrayBuffer()));
 
-  return `${bucket}/${name}`
+  return `/${bucket}/${name}`
 }
 
+/**
+  @param path указывать без слэша в начале!!!
+*/
 export async function putIntoBucketMultiple(
   files: File[],
   issueId: number,

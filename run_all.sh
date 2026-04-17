@@ -63,7 +63,6 @@ docker_cmd run -d --name greenmapper-backend-test \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=greenmapper123 \
   -e POSTGRES_DB=greenmapper \
-  -e DATABASE_URL="postgresql://postgres:greenmapper123@greenmapper-postgres-test:5432/greenmapper" \
   -e BETTER_AUTH_SECRET="b51ec3db616755ae4070273991147f02" \
   -e BETTER_AUTH_URL="http://greenmapper-backend-test:3000" \
   -e BETTER_AUTH_DISABLE_LOGGER="true" \
@@ -79,7 +78,6 @@ docker_cmd run --rm \
   --network "${NETWORK_TEST}" \
   -v "$(pwd)/backend:/app" \
   -w /app \
-  -e DATABASE_URL="postgresql://postgres:greenmapper123@greenmapper-postgres-test:5432/greenmapper" \
   -e BETTER_AUTH_SECRET="b51ec3db616755ae4070273991147f02" \
   -e BETTER_AUTH_URL="http://greenmapper-backend-test:3000" \
   -e BETTER_AUTH_DISABLE_LOGGER="true" \
@@ -115,7 +113,6 @@ docker_cmd run -d --name greenmapper-backend-app \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=greenmapper123 \
   -e POSTGRES_DB=greenmapper \
-  -e DATABASE_URL="postgresql://postgres:greenmapper123@greenmapper-postgres-app:5432/greenmapper" \
   -e BETTER_AUTH_SECRET="b51ec3db616755ae4070273991147f02" \
   -e BETTER_AUTH_URL="http://localhost:3000" \
   -e BETTER_AUTH_DISABLE_LOGGER="true" \

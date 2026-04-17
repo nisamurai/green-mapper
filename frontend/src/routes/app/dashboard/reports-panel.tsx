@@ -1,264 +1,237 @@
-
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { format, subHours } from "date-fns";
 import { ru } from "date-fns/locale";
 
-import useSWR, { mutate } from "swr"; // Импортируем mutate для обновления данных
+import useSWRInfinite from "swr/infinite"; // Смена на Infinite
+import useSWR, { mutate } from "swr"; 
 import { fetcher } from "@/lib/fetcher";
-// Убедимся, что тип Report включает statusId
-// import type { Report } from "@/types/report"; // Убедитесь, что этот тип обновлен или используйте локальный тип
-
-// Если у вас нет отдельного файла types/report.ts, определите тип здесь:
-interface Report {
-	issueId: number;
-	shortDescription: string;
-	detailedDescription?: string;
-	address: string;
-	createdAt: string; // Или Date, в зависимости от того, как приходит с бэкенда
-	expectedResolutionDate?: string; // Или Date
-	statusName: string;
-	typeName: string;
-    statusId: number; // Добавляем statusId
-    userName?: string | null; // Добавляем поля пользователя, если они приходят с бэкенда GET /reports
-    userPoints?: number | null;
-}
-
-const IssueStatuses = {
-	PENDING: 1,
-	IN_WORK: 2,
-	FINISHED: 3,
-	DECLINED: 4,
-} as const
 
 import {
-	Table,
-	TableBody,
-	// TableCaption, // Удаляем неиспользуемый импорт
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
 
-// Импортируем toast из sonner
 import { toast } from "sonner";
 import type { UserProfile } from "./profile";
 import { FRONT_PATHS } from "@/types/paths";
 
-// Импортируем компоненты для диалогового окна подтверждения удаления (опционально, но рекомендуется)
-// import {
-// 	AlertDialog,
-// 	AlertDialogAction,
-// 	AlertDialogCancel,
-// 	AlertDialogContent,
-// 	AlertDialogDescription,
-// 	AlertDialogFooter,
-// 	AlertDialogHeader,
-// 	AlertDialogTitle,
-// 	AlertDialogTrigger,
-// } from "@/components/ui/alert-dialog";
+interface Report {
+    issueId: number;
+    shortDescription: string;
+    detailedDescription?: string;
+    address: string;
+    createdAt: string;
+    expectedResolutionDate?: string;
+    statusName: string;
+    typeName: string;
+    statusId: number;
+    userName?: string | null;
+    userPoints?: number | null;
+}
 
+const IssueStatuses = {
+    PENDING: 1,
+    IN_WORK: 2,
+    FINISHED: 3,
+    DECLINED: 4,
+} as const;
 
-export const DashboardReportsPanel  = () => {
-	// Используем useSWR для получения данных, ключ кэша - "/reports/"
-	const { data: issues, error, isLoading } = useSWR<Report[]>("/reports/", fetcher);
-	const { data: user } = useSWR<UserProfile>("/users/me", fetcher);
-	const isOperator = user?.role === "operator"
-	const navigate = useNavigate();
-	// Функция для удаления заявки
-	const handleDelete = async (issueId: number) => {
-		// Опционально: Добавить диалоговое окно подтверждения перед удалением
-		// const confirmed = window.confirm(`Вы уверены, что хотите удалить заявку #${issueId}?`);
-		// if (!confirmed) {
-		// 	return;
-		// }
+export const DashboardReportsPanel = () => {
+    const navigate = useNavigate();
+    const sentinelRef = useRef<HTMLDivElement>(null);
+    const PAGE_SIZE = 20;
 
-		try {
-			// Отправляем DELETE запрос на бэкенд
-			const response = await fetcher(`/reports/${issueId}`, {
-				method: 'DELETE',
-			});
+    const { data: user } = useSWR<UserProfile>("/users/me", fetcher);
+    const isOperator = user?.role === "operator";
 
-			// Проверяем ответ бэкенда
-			// Предполагаем, что успешный ответ содержит { success: true, ... }
-			if (response && response.success) {
-				console.log(`Заявка #${issueId} успешно удалена.`);
-				// Обновляем данные в кэше SWR
-				mutate("/reports/");
-				// Показать уведомление об успешном удалении
-				toast.success(`Заявка #${issueId} успешно удалена.`);
-			} else {
-                // Обрабатываем случай, когда ответ не содержит success: true или есть поле error
-				console.error(`Ошибка при удалении заявки #${issueId}:`, response?.error || 'Неизвестная ошибка');
-				// Показать уведомление об ошибке
-				toast.error(`Ошибка при удалении заявки #${issueId}: ${response?.error || 'Неизвестная ошибка'}`);
-			}
-		} catch (err: any) { // Добавлено типизирование ошибки для доступа к message
-			console.error(`Ошибка при выполнении DELETE запроса для заявки #${issueId}:`, err);
-			// Показать уведомление об ошибке
-			toast.error(`Ошибка при удалении заявки #${issueId}. ${err.message || 'Произошла ошибка сети.'}`);
-		}
-	};
+    // Генератор ключа для SWR Infinite
+    const getKey = (pageIndex: number, previousPageData: Report[] | null) => {
+        if (previousPageData && !previousPageData.length) return null; // Конец данных
+        return `/reports/?limit=${PAGE_SIZE}&skip=${pageIndex * PAGE_SIZE}`;
+    };
 
-	// Функция для изменения статуса заявки на "На рассмотрении" (statusId = 2)
-	const handleSetStatus = async (issueId: number, status: number) => {
-		try {
-			// Отправляем PUT запрос на бэкенд для изменения статуса
-			const response = await fetcher(`reports/${issueId}/status`, {
-				method: 'PUT',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify({ statusId: status }), // Устанавливаем statusId = 2
-			});
+    const { data, size, setSize, error, isValidating, isLoading } = useSWRInfinite<Report[]>(
+        getKey,
+        fetcher,
+        { revalidateFirstPage: false }
+    );
 
-            // Проверяем ответ бэкенда
-            // Предполагаем, что успешный ответ содержит { success: true, ... }
-			if (response && response.success) {
-				console.log(`Статус заявки #${issueId} изменен на "На рассмотрении".`);
-				// Обновляем данные в кэше SWR
-				mutate("/reports/");
-				// Показать уведомление об успешном изменении статуса
-				toast.success(`Статус заявки #${issueId} изменен на "На рассмотрении".`);
-			} else {
-                 // Обрабатываем случай, когда ответ не содержит success: true или есть поле error
-				console.error(`Ошибка при изменении статуса заявки #${issueId}:`, response?.error || 'Неизвестная ошибка');
-				// Показать уведомление об ошибке
-				toast.error(`Ошибка при изменении статуса заявки #${issueId}: ${response?.error || 'Неизвестная ошибка'}`);
-			}
-		} catch (err: any) { // Добавлено типизирование ошибки для доступа к message
-			console.error(`Ошибка при выполнении PUT запроса для заявки #${issueId}/status:`, err);
-			// Показать уведомление об ошибке
-			toast.error(`Ошибка при изменении статуса заявки #${issueId}. ${err.message || 'Произошла ошибка сети.'}`);
-		}
-	};
+    // Плоский список заявок из всех загруженных страниц
+    const allIssues = data ? data.flat() : [];
+    const isReachingEnd = data && data[data.length - 1]?.length < PAGE_SIZE;
 
-	// Функция для кнопки "Подробнее" (пока ничего не делает)
-	const handleDetails = (issueId: number) => {
-		console.log(`Кнопка "Подробнее" нажата для заявки #${issueId}`);
-		// Здесь можно добавить логику для перехода на страницу с подробной информацией о заявке
-		navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}/${issueId}`);
+    // Наблюдатель (Intersection Observer) для автоматической подгрузки
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && !isReachingEnd && !isValidating) {
+                    setSize((prev) => prev + 1);
+                }
+            },
+            { threshold: 0.1 }
+        );
 
-		// Показать уведомление о нажатии кнопки "Подробнее"
-		// toast.info(`Нажата кнопка "Подробнее" для заявки #${issueId}`);
-	};
+        if (sentinelRef.current) observer.observe(sentinelRef.current);
+        return () => observer.disconnect();
+    }, [isReachingEnd, isValidating, setSize]);
 
+    const handleDelete = async (issueId: number) => {
+        try {
+            const response = await fetcher(`/reports/${issueId}`, { method: 'DELETE' });
+            if (response && response.success) {
+                mutate(getKey); // Обновляем весь кэш бесконечного списка
+                toast.success(`Заявка #${issueId} успешно удалена.`);
+            } else {
+                toast.error(`Ошибка: ${response?.error || 'Неизвестная ошибка'}`);
+            }
+        } catch (err: any) {
+            toast.error(`Ошибка: ${err.message || 'Ошибка сети.'}`);
+        }
+    };
 
-	if (isLoading) return <div>Загрузка заявок...</div>;
-	if (error) return <div>Ошибка загрузки заявок: {error.message}</div>;
-	if (!issues) return <div>Нет данных о заявках.</div>;
+    const handleSetStatus = async (issueId: number, status: number) => {
+        try {
+            const response = await fetcher(`reports/${issueId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ statusId: status }),
+            });
+            if (response && response.success) {
+                mutate(getKey);
+                toast.success(`Статус заявки #${issueId} изменен.`);
+            } else {
+                toast.error(`Ошибка: ${response?.error || 'Неизвестная ошибка'}`);
+            }
+        } catch (err: any) {
+            toast.error(`Ошибка: ${err.message || 'Ошибка сети.'}`);
+        }
+    };
 
+    const handleDetails = (issueId: number) => {
+        navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.REPORTS}/${issueId}`);
+    };
 
-	return (
-		<>
-			<div className="flex flex-1 flex-col gap-4 p-4">
-				<h1 className="text-xl font-bold">Панель управления заявками</h1>
+    if (isLoading && allIssues.length === 0) return <div>Загрузка заявок...</div>;
+    if (error) return <div>Ошибка загрузки: {error.message}</div>;
 
-				<div className="rounded-md border overflow-auto"> {/* Добавляем overflow-auto для горизонтального скролла */}
-					<Table>
-						{/* <TableCaption>Список всех заявок</TableCaption> */}
-						<TableHeader>
-							<TableRow>
-								{/* Новые колонки для кнопок */}
-								<TableHead className="w-[250px]">Действия</TableHead> {/* Увеличена ширина для кнопок */}
-								{/* Оставшиеся поля */}
-								<TableHead>ID</TableHead>
-								<TableHead>Статус</TableHead>
-								<TableHead>Короткое описание</TableHead>
-								<TableHead>Дата создания</TableHead>
-								<TableHead>Ожидаемая дата решения</TableHead>
-                                {/* Убраны поля, которые больше не нужны в этом представлении */}
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{issues.length > 0 ? (
-								issues.map((issue) => (
-									<TableRow key={issue.issueId}>
-										{/* Ячейка с кнопками */}
-										{/* Добавлен flex-wrap для переноса кнопок на новую строку, если не помещаются */}
-										<TableCell className="flex flex-wrap gap-2">
-											{/* Кнопка "Удалить" */}
-											{(
-												issue.statusId === IssueStatuses.PENDING || 
-												issue.statusId === IssueStatuses.IN_WORK ) ? (
-											<Button
-												variant="destructive" // Красный цвет
-												size="sm"
-												onClick={() => handleSetStatus(issue.issueId, IssueStatuses.DECLINED)}
-											>
-												Отклонить
-											</Button>
-											) : (
-											<Button
-												variant="destructive" // Красный цвет для удаления
-												size="sm"
-												onClick={() => handleDelete(issue.issueId)}
-											>
-												Удалить
-											</Button>
-											)}
-											{!isOperator ? 
-												(issue.statusId === IssueStatuses.PENDING ? (
-													<Button
-														variant="secondary" // Серый цвет
-														size="sm"
-														onClick={() => handleSetStatus(issue.issueId, IssueStatuses.IN_WORK)}
-													>
-														Начать рассмотрение
-													</Button>
-												  ) : (
-													<Button
-														variant="secondary" // Серый цвет
-														size="sm"
-														onClick={() => handleSetStatus(issue.issueId, IssueStatuses.PENDING)}
-													>
-														Вернуть в обработку
-													</Button>
-												  )
-												) : issue.statusId === IssueStatuses.IN_WORK && (
-													<Button
-														variant="secondary" // Серый цвет
-														size="sm"
-														onClick={() => handleSetStatus(issue.issueId, IssueStatuses.FINISHED)}
-													>
-														Пометить как выполненную
-													</Button>
-												)
-											}
-                                            {/* Кнопка "Подробнее" */}
-											<Button
-												variant="outline" // Белый контур
-												size="sm"
-												onClick={() => handleDetails(issue.issueId)}
-											>
-												Подробнее
-											</Button>
-										</TableCell>
-										{/* Оставшиеся ячейки данных */}
-										<TableCell className="font-medium">{issue.issueId}</TableCell>
-										<TableCell>{issue.statusName}</TableCell>
-										<TableCell className="whitespace-normal break-words min-w-[200px]">{issue.shortDescription}</TableCell> {/* Добавлен min-w и перенос */}
-										<TableCell>
-											{issue.createdAt ? format(subHours(new Date(issue.createdAt), 0), "dd.MM.yyyy HH:mm", { locale: ru }) : 'Нет данных'}
-										</TableCell>
-										<TableCell>
-											{issue.expectedResolutionDate ? format(new Date(issue.expectedResolutionDate), "dd.MM.yyyy HH:mm", { locale: ru }) : 'Нет данных'}
-										</TableCell>
-									</TableRow>
-								))
-							) : (
-								<TableRow>
-									<TableCell colSpan={6} className="h-24 text-center">
-										Нет заявок для отображения.
-									</TableCell>
-								</TableRow>
-							)}
-						</TableBody>
-					</Table>
-				</div>
-			</div>
-		</>
-	);
+    return (
+        <>
+            <div className="flex flex-1 flex-col gap-4 p-4">
+                <h1 className="text-xl font-bold">Панель управления заявками</h1>
+
+                <div className="rounded-md border overflow-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[250px]">Действия</TableHead>
+                                <TableHead>ID</TableHead>
+                                <TableHead>Статус</TableHead>
+                                <TableHead>Короткое описание</TableHead>
+                                <TableHead>Дата создания</TableHead>
+                                <TableHead>Ожидаемая дата решения</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {allIssues.length > 0 ? (
+                                allIssues.map((issue) => (
+                                    <TableRow key={issue.issueId}>
+                                        <TableCell className="flex flex-wrap gap-2">
+                                            {(issue.statusId === IssueStatuses.PENDING || 
+                                              issue.statusId === IssueStatuses.IN_WORK ) ? (
+                                                <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    onClick={() => handleSetStatus(issue.issueId, IssueStatuses.DECLINED)}
+                                                >
+                                                    Отклонить
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    onClick={() => handleDelete(issue.issueId)}
+                                                >
+                                                    Удалить
+                                                </Button>
+                                            )}
+                                            {!isOperator ? 
+                                                (issue.statusId === IssueStatuses.PENDING ? (
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={() => handleSetStatus(issue.issueId, IssueStatuses.IN_WORK)}
+                                                    >
+                                                        Начать рассмотрение
+                                                    </Button>
+                                                  ) : (
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={() => handleSetStatus(issue.issueId, IssueStatuses.PENDING)}
+                                                    >
+                                                        Вернуть в обработку
+                                                    </Button>
+                                                  )
+                                                ) : issue.statusId === IssueStatuses.IN_WORK && (
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={() => handleSetStatus(issue.issueId, IssueStatuses.FINISHED)}
+                                                    >
+                                                        Пометить как выполненную
+                                                    </Button>
+                                                )
+                                            }
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleDetails(issue.issueId)}
+                                            >
+                                                Подробнее
+                                            </Button>
+                                        </TableCell>
+                                        <TableCell className="font-medium">{issue.issueId}</TableCell>
+                                        <TableCell>{issue.statusName}</TableCell>
+                                        <TableCell className="whitespace-normal break-words min-w-[200px]">{issue.shortDescription}</TableCell>
+                                        <TableCell>
+                                            {issue.createdAt ? format(subHours(new Date(issue.createdAt), 0), "dd.MM.yyyy HH:mm", { locale: ru }) : 'Нет данных'}
+                                        </TableCell>
+                                        <TableCell>
+                                            {issue.expectedResolutionDate ? format(new Date(issue.expectedResolutionDate), "dd.MM.yyyy HH:mm", { locale: ru }) : 'Нет данных'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="h-24 text-center">
+                                        Нет заявок для отображения.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+                
+                {/* Sentinel для бесконечного скролла */}
+                <div ref={sentinelRef} className="py-4 flex justify-center">
+                    {isValidating && !isReachingEnd && (
+                        <div className="text-sm text-muted-foreground animate-pulse">
+                            Загрузка дополнительных данных...
+                        </div>
+                    )}
+                    {isReachingEnd && allIssues.length > 0 && (
+                        <div className="text-xs uppercase tracking-widest text-muted-foreground/50">
+                            Все данные загружены
+                        </div>
+                    )}
+                </div>
+            </div>
+        </>
+    );
 };

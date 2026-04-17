@@ -349,7 +349,7 @@ function DarkMapSPB() {
 				</div>
 				{popupInfo?.issue && (
 					<div onClick={() => {
-						navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}/${popupInfo.issue.issueId}`);
+						navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.REPORTS}/${popupInfo.issue.issueId}`);
 					}}
 					style={{
 						position: "absolute",

@@ -22,7 +22,7 @@ services:
     ports:
       - 6379:6379
     volumes:
-      - $PWD/backend/.data/redis:/data            # возможно нужно поменять лимит
+      - $PWD/backend/.data/redis:/data
     command: redis-server --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
     environment:
       REDIS_PASSWORD: "$REDIS_PASSWORD"
@@ -32,21 +32,61 @@ services:
       retries: 5
       start_period: 10s
       timeout: 10s
+    depends_on:
+      - postgres
+
+  rabbitmq:
+    restart: unless-stopped
+    image: rabbitmq:4.2.4-alpine
+    container_name: rabbitmq
+    ports:
+      - 5672:5672   # AMQP protocol port
+    environment:
+      RABBITMQ_DEFAULT_USER: "$RABBITMQ_USER"
+      RABBITMQ_DEFAULT_PASS: "$RABBITMQ_PASSWORD"
+    volumes:
+      - $PWD/backend/.data/rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+      timeout: 10s
+  
+  worker:
+    build: ./worker
+    restart: unless-stopped
+    environment:
+      IN_CONTAINER: "true"
+      RABBITMQ_USER: "$RABBITMQ_USER"
+      RABBITMQ_PASSWORD: "$RABBITMQ_PASSWORD"
+      RABBITMQ_DEFAULT_USER: "$RABBITMQ_USER"
+      RABBITMQ_DEFAULT_PASS: "$RABBITMQ_PASSWORD"
+      MINIO_MAIN_BUCKET: "$MINIO_MAIN_BUCKET"
+      BETTER_AUTH_SECRET: "$BETTER_AUTH_SECRET"
+    depends_on:
+      - rabbitmq
+      - backend
+    # healthcheck:
+    # test: ["CMD", "curl", "-f", "http://localhost:8080/health"] # !!! внутри нет эндпоинта
+    #   interval: 10s
+    #   retries: 5
+    #   start_period: 10s
+    #   timeout: 10s
 
   backend:
     restart: unless-stopped
     build: ./backend
     environment:
       IN_CONTAINER: true # не трогать!!!
-      
     env_file:
       - .env
     ports:
       - 3000:3000
     depends_on:
       - minio
-      - postgres
       - redis
+      - rabbitmq
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1"]
       interval: 10s

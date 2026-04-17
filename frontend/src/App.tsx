@@ -31,12 +31,12 @@ function App() {
 
 				<Route path={FRONT_PATHS.APP} element={<AppLayout />}>
 					<Route index element={<Home />} />
+					<Route path={`${FRONT_PATHS.REPORTS}/:id`} element={<DashboardViewReport />} />
 					<Route path={FRONT_PATHS.DASHBOARD} element={<DashboardLayout />}>
 						<Route path={FRONT_PATHS.PROFILE} element={<DashboardProfile />} />
 						<Route path={FRONT_PATHS.REPORTS} element={<DashboardReports />} />
 						<Route path={FRONT_PATHS.CREATE_REPORT} element={<DashboardCreateReport />} />
 						<Route path={FRONT_PATHS.REPORTS_PANEL} element={<DashboardReportsPanel />} />
-						<Route path={`${FRONT_PATHS.REPORTS}/:id`} element={<DashboardViewReport />} />
 					</Route>
 				</Route>
 				<Route path="*" element={<Navigate to="/" replace />}/>

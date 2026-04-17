@@ -109,6 +109,8 @@ export const issues = pgTable("issues", {
 }, (table) => ({
   latitude_index: index("latitude_index").on(table.latitude),
   longitude_index: index("longitude_index").on(table.longitude),
+  status_index: index("status_index").on(table.statusId),
+  user_index: index("user_index").on(table.userId),
 }));
 
 // Фотографии

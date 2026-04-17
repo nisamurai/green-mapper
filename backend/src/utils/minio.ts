@@ -1,6 +1,6 @@
 import { minioClient } from "..";
 
-const bucketName = "qwipfm-oqcim-bsr";
+const bucketName = process.env.MINIO_MAIN_BUCKET || "";
 
 export async function createBucketInNotExist(bucket: string = bucketName) {
   const exists = await minioClient.bucketExists(bucket);

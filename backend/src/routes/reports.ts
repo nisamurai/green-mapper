@@ -2,8 +2,9 @@ import { db } from "@/db/db";
 import { authMiddleware } from "@/middleware/auth";
 import Elysia, { t } from "elysia";
 import * as schema from "@/db/schema";
-import { and, gte, lte, sql, eq, or } from "drizzle-orm";
+import { and, gte, lte, sql, eq, or, ne } from "drizzle-orm";
 import { putIntoBucketMultiple, removeFromBucketMultiple } from "@/utils/minio";
+import { rabbitMQ } from "@/utils/rabbitmq";
 
 const createReportBody = t.Object({
 	latitude: t.String(),
@@ -19,20 +20,26 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
   .use(authMiddleware)
   .get(
     "/",
-    async ({ query }) => {
+    async ({ query, user }) => {
       const {
         latitude,
         longitude,
         distance,
         limit,
         skip,
-        userId
+        userId,
+        showMyOnly
       } = query;
 
       const filters = [];
 
-      if (userId) {
-        filters.push(eq(schema.issues.userId, userId));
+      if (showMyOnly && user) {
+        filters.push(eq(schema.issues.userId, user.id));
+      } else {
+        filters.push(ne(schema.issues.statusId, 5)); //!!! костыль, чтобы фильтровать не валидированные нейронкой !!!
+        if (userId) {
+          filters.push(eq(schema.issues.userId, userId));
+        }
       }
 
       if (distance && distance > 0) {
@@ -130,6 +137,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
     },
     {
       auth: false,
+      partialAuth: true,
       query: t.Object({
         latitude: t.Optional(t.Numeric()),
         longitude: t.Optional(t.Numeric()),
@@ -145,15 +153,17 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
           minimum: 0,
           description: "Number of items to skip (only used with limit)"
         })),
-        
         userId: t.Optional(t.String({
           description: "Filter by user ID"
-        }))
+        })),
+        showMyOnly: t.Optional(t.Boolean({
+          description: "Include my reports only. Ignored if unathenticated"
+        })),
       })
     }
   ).get(
 		"/:id",
-		async ({ params: { id }, status }) => {
+		async ({ params: { id }, status, user, serviceRequest }) => {
 			// Запрос для получения одной заявки по ID (может быть расширен при необходимости)
 			const report = await db.select({
           issueId: schema.issues.issueId,
@@ -186,12 +196,17 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         .where(eq(schema.issues.issueId, id))
         .limit(1);
 
-			if (!report)
+			if (!report || report.length === 0)
 				return status('Not Found')
+      
+      //!!! костыль, чтобы фильтровать не валидированные нейронкой !!!
+      if(!serviceRequest && report[0].statusId === 5 && report[0].userId !== user?.id) {
+        return status('Not Found')
+      }
 
-			return report
+			return report[0]
 		},
-		{ params: t.Object({ id: t.Number() }), auth: true },
+		{ params: t.Object({ id: t.Number() }), auth: false, partialAuth: true },
 	)
 	.get("/issue-types", async () => {
 		// Запрос для получения списка типов заявок
@@ -210,7 +225,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 		// Начинаем транзакцию базы данных
 		try {
 			const result = await db.transaction(async (tx) => {
-				const defaultStatusId = 1; // ID статуса по умолчанию ('В обработке')
+				const defaultStatusId = 5; // ID статуса по умолчанию ('На валидации')
 
 				// Проверяем существование типа заявки
 				const issueType = await tx.query.issueTypes.findFirst({
@@ -247,23 +262,23 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         let paths: string[] = []
         if (files) {
           paths = await putIntoBucketMultiple(files, newIssue[0].issueId)
+          const newPhotos = await tx.insert(schema.photos).values(
+            paths.map(path => ({
+            issueId: newIssue[0].issueId,
+            filePath: path,
+            uploadedAt: new Date()
+          }))).returning()
+          
+          // Проверяем, успешно ли добавлены фото
+          if (newPhotos.length !== paths.length) {
+            console.error("failed to add photos")
+            await removeFromBucketMultiple(newPhotos.map(el => el.filePath))
+            set.status = 500;
+            tx.rollback();
+            return { error: "Failed to create report." };
+          }
         }
         
-        const newPhotos = await tx.insert(schema.photos).values(
-          paths.map(path => ({
-          issueId: newIssue[0].issueId,
-          filePath: path,
-          uploadedAt: new Date()
-        }))).returning()
-        
-        // Проверяем, успешно ли добавлены фото
-        if (newPhotos.length !== paths.length) {
-          console.error("failed to add photos")
-          await removeFromBucketMultiple(newPhotos.map(el => el.filePath))
-          set.status = 500;
-          tx.rollback();
-          return { error: "Failed to create report." };
-        }
         
 				// Добавляем 1 балл к рейтингу пользователя
 				await tx.update(schema.user)
@@ -275,26 +290,34 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 			});
 
 			if ('issueId' in result) {
-				set.status = 201;
-				return result;
-			} else {
-				return result;
-			}
+        try {
+          await rabbitMQ.notifyIssueCreated({
+            issueId: result.issueId,
+            createdAt: result.createdAt || new Date()
+          });
+        } catch (queueError) {
+          console.error('Failed to send message to queue:', queueError);
+        }
+        set.status = 201;
+        return result;
+      } else {
+        return result;
+      }
 
-		} catch (error) {
-			console.error("Error creating report and updating user points:", error);
-			set.status = 500;
-			return { error: "Internal server error." };
-		}
+    } catch (error) {
+      console.error("Error creating report and updating user points:", error);
+      set.status = 500;
+      return { error: "Internal server error." };
+    }
 	}, {
 		body: createReportBody,
 		auth: true
 	})
     // !!! НОВЫЙ ЭНДПОИНТ ДЛЯ УДАЛЕНИЯ ЗАЯВКИ (ТОЛЬКО ДЛЯ АДМИНА) !!!
-    .delete("/:id", async ({ params: { id }, user, set }) => {
+    .delete("/:id", async ({ params: { id }, user, set, serviceRequest }) => {
         // Проверяем, авторизован ли пользователь и является ли он админом
-        if (!user || (user.role !== 'admin' && user.role !== "operator")) {
-			set.status = 403; // Forbidden
+        if (!serviceRequest && (user?.role !== 'admin' && user?.role !== "operator")) {
+			      set.status = 403; // Forbidden
             return { error: "Forbidden" };
         }
 
@@ -337,9 +360,9 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         auth: true // Требуется аутентификация
     })
     // !!! НОВЫЙ ЭНДПОИНТ ДЛЯ ИЗМЕНЕНИЯ СТАТУСА ЗАЯВКИ (ТОЛЬКО ДЛЯ АДМИНА) !!!
-    .put("/:id/status", async ({ params: { id }, body, user, set }) => {
+    .put("/:id/status", async ({ params: { id }, body, user, set, serviceRequest }) => {
         // Проверяем, авторизован ли пользователь и является ли он админом
-        if (!user || (user.role !== 'admin' && user.role !== "operator")) {
+        if (!serviceRequest && (user?.role !== 'admin' && user?.role !== "operator")) {
 			set.status = 403; // Forbidden
             return { error: "Forbidden" };
         }

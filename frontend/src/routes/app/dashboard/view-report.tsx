@@ -140,7 +140,7 @@ export const DashboardViewReport = () => {
 	const issueId = id ? parseInt(id, 10) : null;
 
 	// Загрузка данных заявки
-	const { data: report, error, isLoading } = useSWR<Report[]>(
+	const { data: issue, error, isLoading } = useSWR<Report>(
 		issueId ? `/reports/${issueId}` : null,
 		fetcher
 	);
@@ -167,7 +167,7 @@ export const DashboardViewReport = () => {
 	}
 
 	// Проверка существования заявки после загрузки
-	if (!isLoading && (!report || report.length === 0)) {
+	if (!isLoading && (!issue)) {
 		return (
 			<div className="container max-w-4xl mx-auto p-4 md:p-6">
 				<Card>
@@ -184,11 +184,10 @@ export const DashboardViewReport = () => {
 		);
 	}
 
-	if (isLoading || !report) {
+	if (isLoading || !issue) {
 		return <ReportSkeleton />;
 	}
 
-	const issue = report[0]; // API возвращает массив с одной заявкой
 
 	// Форматирование даты
 	const formatDate = (date: Date | string | null) => {

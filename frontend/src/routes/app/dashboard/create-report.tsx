@@ -53,6 +53,8 @@ interface CreateReportState {
 	longitude?: string | number;
 }
 
+const maxFilesCount = 5
+
 export const DashboardCreateReport = () => {
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -361,7 +363,10 @@ export const DashboardCreateReport = () => {
 								</div>
 								<div className="grid w-full max-w-full items-center min-w-0">
 									<div className="flex justify-between">
-									<Label htmlFor="picture">Загруженные фото: </Label>
+									<Label htmlFor="picture">
+										Загруженные фото: 
+									<span className="text-gray-500 text-xs  relative top-[1px]">{files.length}/{maxFilesCount}</span>
+									</Label>
 									{photoPreviews.length !== 0 && (
 										<Button
 										  variant="outline"
@@ -403,7 +408,11 @@ export const DashboardCreateReport = () => {
 											multiple
 											onChange={(e) => {
 												if(e.target.files) {
-													const loadedFiles = Array.from(e.target.files)
+													let loadedFiles = Array.from(e.target.files)
+													if(loadedFiles.length > maxFilesCount) {
+														loadedFiles = loadedFiles.splice(0, maxFilesCount)
+														toast.error(`Максимальное количество загружаемых файлов: ${maxFilesCount}`)
+													}
 													const urls: string[] = []
 													setFiles(loadedFiles)
 													loadedFiles.forEach(file => {

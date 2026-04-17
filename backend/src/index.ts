@@ -6,6 +6,7 @@ import { cors } from "@elysiajs/cors";
 import { reportsRouter } from "./routes/reports";
 import { usersRouter } from "./routes/users";
 import * as Minio from 'minio';
+import { rabbitMQ } from "./utils/rabbitmq";
 
 export const minioClient = new Minio.Client({
   endPoint: process.env.IN_CONTAINER ? "minio" : 'localhost', // IP or hostname
@@ -67,6 +68,12 @@ const app = new Elysia()
 	.listen(3000);
 
 console.log(`Started at ${app.server?.hostname}:${app.server?.port}`);
-setTimeout(() => {
-	createBucketInNotExist()
-}, 1000)
+setTimeout(async () => {
+	try {
+		await createBucketInNotExist()
+		await rabbitMQ.connect();
+	} catch (error) {
+		console.error("Failed to initialize services:", error);
+		app.server?.stop()
+	}
+}, 3000)

@@ -53,7 +53,7 @@ interface CreateReportState {
 	longitude?: string | number;
 }
 
-const maxFilesCount = 5
+const maxFilesCount = 3
 
 export const DashboardCreateReport = () => {
 	const navigate = useNavigate();

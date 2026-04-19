@@ -57,13 +57,9 @@ services:
     build: ./worker
     restart: unless-stopped
     environment:
-      IN_CONTAINER: "true"
-      RABBITMQ_USER: "$RABBITMQ_USER"
-      RABBITMQ_PASSWORD: "$RABBITMQ_PASSWORD"
-      RABBITMQ_DEFAULT_USER: "$RABBITMQ_USER"
-      RABBITMQ_DEFAULT_PASS: "$RABBITMQ_PASSWORD"
-      MINIO_MAIN_BUCKET: "$MINIO_MAIN_BUCKET"
-      BETTER_AUTH_SECRET: "$BETTER_AUTH_SECRET"
+      IN_CONTAINER: true
+    env_file:
+      - .env
     depends_on:
       - rabbitmq
       - backend
@@ -88,7 +84,7 @@ services:
       - redis
       - rabbitmq
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://0.0.0.0:3000/health || exit 1"]
       interval: 10s
       retries: 5
       start_period: 10s
@@ -126,6 +122,7 @@ services:
       VITE_BETTER_AUTH_BASE_URL: "$VITE_BETTER_AUTH_BASE_URL"
       VITE_API_BASE_URL: "$VITE_API_BASE_URL"
       VITE_MINIO_BASE_URL: "$VITE_MINIO_BASE_URL"
+      CADDY_PROXY_URL: "$CADDY_PROXY_URL"
     ports:
       - '80:80'
     depends_on:

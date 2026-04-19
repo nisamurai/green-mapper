@@ -5,10 +5,9 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { openAPI, twoFactor, genericOAuth } from "better-auth/plugins";
 import Elysia from "elysia";
 import { sendEmail } from "@/utils/email";
-
 export const auth = betterAuth({
     basePath: "/auth",
-	trustedOrigins: ["http://localhost:5173"],
+	trustedOrigins: (process.env.CORS_ORIGIN || "").split(","),
 	appName: "GreenMapper",
 	database: drizzleAdapter(db, {
 		provider: "pg",
@@ -25,8 +24,8 @@ export const auth = betterAuth({
 					authorizationUrl: "https://oauth.yandex.ru/authorize",
 					tokenUrl: "https://oauth.yandex.ru/token",
 					userInfoUrl: "https://login.yandex.ru/info?format=json",
-					clientId: process.env.YANDEX_CLIENT_ID,
-					clientSecret: process.env.YANDEX_CLIENT_SECRET,
+					clientId: process.env.YANDEX_CLIENT_ID || "",
+					clientSecret: process.env.YANDEX_CLIENT_SECRET || "",
 					pkce: true,
 					scopes: ["login:info", "login:email"],
 

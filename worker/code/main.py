@@ -66,7 +66,7 @@ class RabbitMQClient:
 
 async def main():
     logger.info("waiting for brocker startup")
-    time.sleep(4)
+    time.sleep(float(os.getenv("RABBITMQ_DELAY_SECONDS", "0")))
     logger.info("attempt to connect")
     client = RabbitMQClient()
     

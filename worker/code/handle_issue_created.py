@@ -4,8 +4,8 @@ import logging
 import os
 import aio_pika
 from minio import Minio
-import pprint
-import time
+
+from .scan_images_ollama import moderate_image
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -31,51 +31,63 @@ async def handle_issue_created(data: dict, message: aio_pika.IncomingMessage):
     issue_id = data.get("issueId")
     timestamp = data.get("timestamp")
     logger.info(f"Processing issue {issue_id} created at {timestamp}")
-    async with ClientSession(timeout=timeout) as session:
-        retry_client = RetryClient(session)
-        async with retry_client.get(
-            f"http://{back_host}:3000/reports/{issue_id}",
-            headers={"x-service-key": secret},
-            retry_options=retry_options,
-        ) as response:
-            response.raise_for_status()
-
-            issue = await response.json()
-
-    # TODO: получить фотки из minio
-    files = [
-        client.get_object(
-            bucket_name=bucket,
-            object_name=link.replace(f"{bucket}/", "")
-        ).read()
-        for link in issue["links"]
-    ]
-    llm_answer = await check(issue, files)
-
-    async with ClientSession(timeout=timeout) as session:
-        retry_client = RetryClient(session)
-        if llm_answer["verified"]:
-            async with retry_client.put(
-                f"http://{back_host}:3000/reports/{issue_id}/status",
-                headers={"x-service-key": secret},
-                json={"statusId": 1},
-                retry_options=retry_options,
-            ) as response:
-                response.raise_for_status()
-                logger.info(f"issue {issue_id} verified")
-        else:
-            async with retry_client.delete(
+    try:
+        async with ClientSession(timeout=timeout) as session:
+            retry_client = RetryClient(session)
+            async with retry_client.get(
                 f"http://{back_host}:3000/reports/{issue_id}",
                 headers={"x-service-key": secret},
                 retry_options=retry_options,
             ) as response:
                 response.raise_for_status()
-                logger.info(f"issue {issue_id} not verified, reason: {llm_answer["message"]}")
+
+                issue = await response.json()
+    except Exception as e:
+        logger.error(f"ошибка при чтении заявки: {e}", exc_info=True)
+        raise e
+
+    try:
+        # TODO: получить фотки из minio
+        files = [
+            client.get_object(
+                bucket_name=bucket,
+                object_name=link.replace(f"{bucket}/", "")
+            ).read()
+            for link in issue["links"]
+        ]
+    except Exception as e:
+        logger.error(f"ошибка при получении фотографий: {e}", exc_info=True)
+        raise e
+
+    llm_answer = await moderate_image(issue, files)
+
+    try:
+        async with ClientSession(timeout=timeout) as session:
+            retry_client = RetryClient(session)
+            if llm_answer["verified"]:
+                logger.info(f"issue was accepted, message: {llm_answer['message']}")
+                async with retry_client.put(
+                    f"http://{back_host}:3000/reports/{issue_id}/status",
+                    headers={"x-service-key": secret},
+                    json={"statusId": 1},
+                    retry_options=retry_options,
+                ) as response:
+                    response.raise_for_status()
+                    logger.info(f"issue {issue_id} verified")
+            else:
+                logger.warning(f"issue was not accepted, message: {llm_answer['message']}")
+
+                async with retry_client.delete(
+                    f"http://{back_host}:3000/reports/{issue_id}",
+                    headers={"x-service-key": secret},
+                    retry_options=retry_options,
+                ) as response:
+                    response.raise_for_status()
+                    logger.info(f"issue {issue_id} not verified, reason: {llm_answer["message"]}")
+    except Exception as e:
+        logger.error(f"не удалось сообщить беку о результате проверки: {e}", exc_info=True)
+        raise e
 
     logger.info(f"Issue {issue_id} processed successfully")
+    return
 
-
-async def check(issue, files):
-    time.sleep(10)
-    logger.info(f"issue: {pprint.pformat(issue)}. files len: {len(files)}")
-    return {"verified": True, "message": ""}

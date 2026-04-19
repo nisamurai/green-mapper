@@ -222,6 +222,27 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 			return { error: "Unauthorized" };
 		}
 
+    if (files) {
+      if (files.length > 3) {
+        set.status = 422;
+        return { error: "To much files" };
+      }
+      let name = "";
+      if (
+        files.some((file) => {
+          if (file.type.startsWith("image/")) {
+            return true;
+          } else {
+            name = file.name;
+            return false;
+          }
+        })
+      ) {
+        set.status = 422;
+        return { error: `file '${name}' is not an image` };
+      }
+    } 
+
 		// Начинаем транзакцию базы данных
 		try {
 			const result = await db.transaction(async (tx) => {

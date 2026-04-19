@@ -7,7 +7,6 @@ import { reportsRouter } from "./routes/reports";
 import { usersRouter } from "./routes/users";
 import * as Minio from 'minio';
 import { rabbitMQ } from "./utils/rabbitmq";
-
 export const minioClient = new Minio.Client({
   endPoint: process.env.IN_CONTAINER ? "minio" : 'localhost', // IP or hostname
   port: 9000,
@@ -15,11 +14,10 @@ export const minioClient = new Minio.Client({
   accessKey: process.env.MINIO_ROOT_USER, 
   secretKey: process.env.MINIO_ROOT_PASSWORD
 });
-
 const app = new Elysia()
 	.use(
 		cors({
-			origin: process.env.CORS_ORIGIN,
+			origin: (process.env.CORS_ORIGIN || "").split(","),
 			methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 			credentials: true,
 			allowedHeaders: ["Content-Type", "Authorization"],
@@ -65,7 +63,10 @@ const app = new Elysia()
 	.mount(auth.handler)
 	.use(usersRouter)
 	.use(reportsRouter)
-	.listen(3000);
+	.listen({
+		hostname: "0.0.0.0",
+		port: 3000
+	});
 
 console.log(`Started at ${app.server?.hostname}:${app.server?.port}`);
 setTimeout(async () => {
@@ -76,4 +77,5 @@ setTimeout(async () => {
 		console.error("Failed to initialize services:", error);
 		app.server?.stop()
 	}
-}, 3000)
+}, Number(process.env.RABBITMQ_DELAY_SECONDS || "0")*1000)
+

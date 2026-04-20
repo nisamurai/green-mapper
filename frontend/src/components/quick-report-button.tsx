@@ -18,27 +18,32 @@ export function QuickReportButton(
     const videoRef = React.useRef<HTMLVideoElement>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-    const requestGeolocation = async () => {
+    const requestGeolocation = () => {
         if (!navigator.geolocation) {
             throw new Error("Геолокация в этом браузере недоступна.");
         }
 
-        return new Promise<{ latitude: string; longitude: string }>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    resolve({
-                        latitude: position.coords.latitude.toString(),
-                        longitude: position.coords.longitude.toString(),
-                    });
-                },
-                (error) => reject(error),
-                {
-                    enableHighAccuracy: true,
-                    maximumAge: 0,
-                    timeout: 30000,
-                },
-            );
-        });
+        let coords: { latitude: string; longitude: string } = {latitude: "", longitude: ""}
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                coords = {
+                    latitude: position.coords.latitude.toString(),
+                    longitude: position.coords.longitude.toString(),
+                };
+            },
+            (error) => {
+                console.log(error)
+                throw error
+            },
+            {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 30000,
+            },
+        );
+
+        return coords
     };
 
     const openCamera = async () => {
@@ -46,7 +51,6 @@ export function QuickReportButton(
 
         setErrorMessage(null);
         setRedirectToMapOnDismiss(false);
-        setCapturedCoords(null);
 
         let cameraPromise: Promise<MediaStream> | null = null;
         if (isSecureOrigin) {
@@ -78,27 +82,27 @@ export function QuickReportButton(
         }
     };
 
-    const navigateToCreateReportWithPhoto = async (file: File, coords: { latitude: string; longitude: string } | null = null) => {
-        const path = "/app/dashboard/create-report";
-
+    const navigateToCreateReportWithPhoto = (file: File) => {
         // Используем переданные координаты напрямую (из takePhoto)
-        if (coords?.latitude && coords?.longitude) {
+        if (capturedCoords?.latitude && capturedCoords?.longitude) {
+            const path = `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.CREATE_REPORT}?latitude=${capturedCoords.latitude}&longitude=${capturedCoords.longitude}`
             navigate(path, {
                 state: {
                     photo: file,
-                    latitude: coords.latitude,
-                    longitude: coords.longitude,
+                    latitude: capturedCoords.latitude,
+                    longitude: capturedCoords.longitude,
                 },
             });
             return;
         }
-
+        
         // Fallback: пробуем получить координаты заново
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     const lat = position.coords.latitude;
                     const lng = position.coords.longitude;
+                    const path = `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.CREATE_REPORT}?latitude=${lat}&longitude=${lng}`
                     navigate(path, {
                         state: {
                             photo: file,
@@ -133,7 +137,7 @@ export function QuickReportButton(
         if (!file) {
             return;
         }
-        navigateToCreateReportWithPhoto(file, null);
+        navigateToCreateReportWithPhoto(file);
     };
 
     const closeCamera = () => {
@@ -145,23 +149,7 @@ export function QuickReportButton(
         setIsCameraOpen(false);
     };
 
-    const takePhoto = async () => {
-        // Сначала получаем координаты
-        let coords: { latitude: string; longitude: string } | null = null;
-        try {
-            coords = await requestGeolocation();
-            setCapturedCoords(coords);
-        } catch (error) {
-            console.error("Ошибка получения координат:", error);
-            // Показываем сообщение об ошибке и закрываем камеру
-            closeCamera();
-            setErrorMessage(
-                "Не удалось получить ваше местоположение. Разрешите доступ к геолокации в браузере и попробуйте снова.",
-            );
-            setRedirectToMapOnDismiss(true);
-            return;
-        }
-
+    const takePhoto = () => {
         // Делаем снимок только если координаты получены успешно
         if (videoRef.current) {
             const canvas = document.createElement('canvas');
@@ -175,7 +163,7 @@ export function QuickReportButton(
                         const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
                         closeCamera();
                         // Передаём координаты напрямую в функцию навигации
-                        navigateToCreateReportWithPhoto(file, coords);
+                        navigateToCreateReportWithPhoto(file);
                     }
                 }, 'image/jpeg');
             }
@@ -183,17 +171,24 @@ export function QuickReportButton(
     };
 
     const handleClick = () => {
-        if (!session) {
-            navigate('/auth/login');
-            return;
+      setIsPressed(true);
+      setTimeout(() => setIsPressed(false), 200);
+      if (isCameraOpen) {
+        closeCamera();
+      } else {
+        try {
+          const coords = requestGeolocation();
+          if (coords.latitude === "" || coords.longitude === "")
+            throw new Error("wrong coords");
+          setCapturedCoords(coords);
+          openCamera();
+        } catch (e) {
+          setErrorMessage(
+            "Не удалось получить ваше местоположение. Разрешите доступ к геолокации в браузере. Нажмите «ОК», чтобы вернуться на карту.",
+          );
+          setRedirectToMapOnDismiss(true);
         }
-        setIsPressed(true);
-        setTimeout(() => setIsPressed(false), 200);
-        if (isCameraOpen) {
-            closeCamera();
-        } else {
-            openCamera();
-        }
+      }
     };
 
     return (

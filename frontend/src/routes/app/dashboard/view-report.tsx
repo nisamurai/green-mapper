@@ -204,9 +204,8 @@ export const DashboardViewReport = () => {
 
 	// Открытие карты с координатами
 	const openMap = () => {
-		// TODO: попробовать показывать на нашей карте
-		if (issue.latitude && issue.longitude) {
-			const url = `https://www.openstreetmap.org/?mlat=${issue.latitude}&mlon=${issue.longitude}#map=15/${issue.latitude}/${issue.longitude}`;
+		if (issue.latitude && issue.longitude && issue.statusId !== 5) {
+			const url = `/${FRONT_PATHS.APP}?issueId=${issue.issueId}&longitude=${issue.longitude}&latitude=${issue.latitude}`;
 			window.open(url, "_blank");
 		}
 	};
@@ -273,14 +272,16 @@ export const DashboardViewReport = () => {
 									<p className="text-sm text-muted-foreground mb-1">Адрес</p>
 									<p className="font-medium break-words">{issue.address}</p>
 								</div>
+
 								{(issue.latitude && issue.longitude) && (
 									<Button
 										variant="outline"
 										onClick={openMap}
+										disabled={issue.statusId === 5}
 										className="w-full md:w-auto"
 									>
 										<MapPin className="w-4 h-4 mr-2" />
-										Показать на карте
+										{issue.statusId !== 5 ? "Показать на карте" : "Заявка на валидации" }
 									</Button>
 								)}
 							</div>

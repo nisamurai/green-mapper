@@ -231,10 +231,10 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
       if (
         files.some((file) => {
           if (file.type.startsWith("image/")) {
-            return true;
+            return false;
           } else {
             name = file.name;
-            return false;
+            return true;
           }
         })
       ) {

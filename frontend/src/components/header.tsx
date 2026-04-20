@@ -39,7 +39,10 @@ export const Header = () => {
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem className="hidden md:block">
-            <BreadcrumbLink onClick={() => setStr("Green Mapper")}>
+            <BreadcrumbLink onClick={() => {
+              setStr("Green Mapper")
+              navigate(`/${FRONT_PATHS.APP}`)
+              }}>
               {str}
             </BreadcrumbLink>
           </BreadcrumbItem>

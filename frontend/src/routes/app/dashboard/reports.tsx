@@ -18,7 +18,9 @@ import { FRONT_PATHS } from "@/types/paths";
 import { useNavigate } from "react-router";
 
 export const DashboardReports = () => {
-    const [showMyOnly, setShowMyOnly] = useState(false);
+    const [showMyOnly, setShowMyOnly] = useState(() => {
+        return !!((new URLSearchParams(window.location.search)).get("showMyOnly"));
+    });
     const sentinelRef = useRef<HTMLDivElement>(null);
 	const navigate = useNavigate()
 

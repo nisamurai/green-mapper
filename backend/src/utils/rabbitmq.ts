@@ -70,9 +70,9 @@ class RabbitMQService {
     await this.channel.assertQueue("issue.created.queue", {
       durable: true,
       arguments: {
+        // "x-queue-type": "quorum"
         "x-dead-letter-exchange": "issues.dlx",
         "x-dead-letter-routing-key": "issue.created.dead",
-        "x-max-retries": 3,
       },
     });
 
@@ -86,6 +86,7 @@ class RabbitMQService {
     // Dead Letter Queue
     await this.channel.assertQueue("issue.created.dlq", {
       durable: true,
+      // arguments: {"x-queue-type": "quorum"}
     });
 
     // Bind DLQ to Dead Letter Exchange
@@ -94,6 +95,17 @@ class RabbitMQService {
       "issues.dlx",
       "issue.created.dead",
     );
+    
+    await this.channel.assertQueue("issue.created.retry", {
+      durable: true,
+      arguments: {
+        // "x-queue-type": "quorum"
+        "x-dead-letter-exchange": "issues.exchange",
+        "x-dead-letter-routing-key": "issue.created",
+        "x-message-ttl": 5000,
+        "x-max-length": 10000,
+      },
+    });
   }
 
   async notifyIssueCreated<T extends { issueId: number; createdAt: Date }>(

@@ -208,7 +208,9 @@ export const DashboardCreateReport = () => {
 				toast.success("Заявка успешно создана!");
 				toast.success("Вам начислен +1 балл :)");
 				// Перенаправляем пользователя на страницу со списком заявок
-				navigate(`../${FRONT_PATHS.REPORTS}`);
+				setTimeout(() => {
+					navigate(`../${FRONT_PATHS.REPORTS}?showMyOnly=true`);
+				}, 100)
 			} else {
 				// Если fetcher не выбросил ошибку, но issueId отсутствует,
 				// возможно, fetcher возвращает объект ошибки или null при неудаче,

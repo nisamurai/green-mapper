@@ -5,7 +5,7 @@ import os
 import time
 
 import aio_pika
-
+from pamqp import commands as spec
 from .handle_issue_created import handle_issue_created
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -43,14 +43,36 @@ class RabbitMQClient:
         self.is_consuming = True
         
         async def on_message(message: aio_pika.IncomingMessage):
-            async with message.process():
-                try:
-                    body = json.loads(message.body.decode())
-                    logger.info(f"Received message: {body}")
-                    await callback(body, message)
-                except Exception as e:
-                    logger.error(f"Error processing message: {e}")
-                    await message.reject(requeue=True)
+            headers = message.headers or {}
+            retry_count = headers.get("x-retry-count", 0)
+            max_retries = 3
+            
+            try:
+                body = json.loads(message.body.decode())
+                logger.info(f"Received message: {body} (retry {retry_count}/{max_retries})")
+                await callback(body, message)  # Pass both
+                await message.ack()
+                
+            except Exception as e:
+                logger.error(f"Error processing message: {e}")
+                
+                if retry_count < max_retries:
+                    logger.warning(f"Moving message to retry queue ({retry_count + 1}/{max_retries})")
+
+                    if not self.channel:
+                        raise Exception("Channel not available")
+
+                    A = await message.channel.basic_publish(
+                            body=message.body,
+                            
+                            properties= spec.Basic.Properties(headers={"x-retry-count": retry_count + 1}, delivery_mode=2),
+                            routing_key="issue.created.retry",
+                        ),
+                    await message.ack()
+                    
+                else:
+                    logger.error("Max retries exceeded, sending to DLQ")
+                    await message.reject(requeue=False)
         
         await queue.consume(on_message)
         logger.info("Started consuming issue.created messages")

@@ -1,14 +1,11 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { sql } from "drizzle-orm";
+import { postgresString } from "@/db/db";
 
 console.log("Migrating...");
 
-const dbUrl = process.env.DATABASE_URL;
-
-if (!dbUrl) throw new Error("DATABASE_URL is missing");
-
-const db = drizzle(dbUrl);
+const db = drizzle(postgresString);
 
 await db.execute(sql`CREATE SCHEMA IF NOT EXISTS auth;`);
 
@@ -32,6 +29,9 @@ await db.execute(
 );
 await db.execute(
 	sql`insert into issue_statuses (name) values ('Отклонена') on conflict (name) do nothing`,
+);
+await db.execute(
+	sql`insert into issue_statuses (name) values ('На валидации') on conflict (name) do nothing`,
 );
 
 console.log("Seeding completed");

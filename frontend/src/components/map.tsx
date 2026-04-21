@@ -1,23 +1,25 @@
-import React, { useEffect, useState, useRef } from "react";
-import "ol/ol.css";
-import Map from "ol/Map";
-import View from "ol/View";
-import TileLayer from "ol/layer/Tile";
-import { OSM } from "ol/source";
-import { fromLonLat, toLonLat } from "ol/proj";
-import { defaults as defaultControls, Zoom } from "ol/control";
-import Overlay from "ol/Overlay";
+import { fetcher } from "@/lib/fetcher";
+import { FRONT_PATHS } from "@/types/paths";
+import { EyeIcon, SquareX } from "lucide-react";
+import { defaults as defaultControls,  } from "ol/control";
+import type { Coordinate } from "ol/coordinate";
 import Feature from "ol/Feature";
 import Point from "ol/geom/Point";
-import { Vector as VectorSource } from "ol/source";
 import { Vector as VectorLayer } from "ol/layer";
-import { Style, Icon } from "ol/style";
+import TileLayer from "ol/layer/Tile";
+import Map from "ol/Map";
+import MapBrowserEvent from 'ol/MapBrowserEvent';
+import "ol/ol.css";
+import Overlay from "ol/Overlay";
+import { fromLonLat, toLonLat } from "ol/proj";
+import { OSM, Vector as VectorSource } from "ol/source";
+import { Icon, Style } from "ol/style";
+import View from "ol/View";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import useSWR from "swr";
-import { fetcher } from "@/lib/fetcher";
-import { SquareX } from "lucide-react";
-import { FRONT_PATHS } from "@/types/paths";
 import { QuickReportButton } from "./quick-report-button";
+import { getWidth } from 'ol/extent';
+import useSWRInfinite from "swr/infinite";
 
 // Определите тип для заявки с учетом данных пользователя и типа
 interface Report {
@@ -29,6 +31,26 @@ interface Report {
 	userPoints: number | null;
 	typeName: string | null; // Добавляем поле для типа заявки
 }
+const extentRussia = [
+	// Примерный bbox для Российской Федерации (без учёта anti-meridian wrap)
+	...fromLonLat([19.6389, 41.185]), // запад/юг (Калининград / юг РФ)
+	...fromLonLat([180, 82.0]), // восток (до 180°) / север (мыс Челюскин)
+];
+const DefaultCenter = fromLonLat([30.3, 59.95])
+function moveTo(map: Map, coordinate: Coordinate, targetZoom = 17) {
+	map.renderSync()
+	
+  setTimeout(() => {
+    const view = map.getView();
+	
+    view.animate({
+		center: coordinate,
+		zoom: targetZoom,
+		duration: 600,
+    }, 
+  );
+}, 100);
+}
 
 function DarkMapSPB() {
 	const [popupInfo, setPopupInfo] = useState<{
@@ -38,9 +60,10 @@ function DarkMapSPB() {
 	} | null>(null);
 	const mapRef = useRef<Map | null>(null);
 	const navigate = useNavigate();
-
 	// Используем useRef для стабильных ссылок на источники и слои
 	const issueMarkerSourceRef = useRef(new VectorSource());
+	const latestIssuesDataRef = useRef<Report[]>([]);
+	const isFetchingIp = useRef(false)
 	const issueMarkerLayerRef = useRef(new VectorLayer({
 		source: issueMarkerSourceRef.current,
 		style: new Style({
@@ -64,9 +87,51 @@ function DarkMapSPB() {
 		}),
 	}));
 	const mapContainerRef = useRef<HTMLDivElement>(null);
+	const isFirstLoadHandled = useRef(false);
+	const [mapBounds, setMapBounds] = useState<{
+		lat: number;
+		lon: number;
+		distance: number;
+	} | null>(() => {
+		const params = new URLSearchParams(window.location.search);
+		const lat = params.get("latitude");
+		const lon = params.get("longitude");
+		
+		if (lat && lon) {
+			return {
+				lat: parseFloat(lat),
+				lon: parseFloat(lon),
+				distance: 0.05 // A default zoom-in distance
+			};
+		}
+		return null; 
+	});
 
-	// Загрузка данных о заявках с бэкенда
-	const { data: issuesData, error: issuesError } = useSWR<Report[]>("/reports/", fetcher);
+	// Update getKey to use this state
+	const getKey = (pageIndex: number, previousPageData: Report[] | null) => {
+		if (previousPageData && !previousPageData.length) return null;
+		if (!mapBounds) return null; // Don't fetch until we have bounds
+
+		const params = new URLSearchParams({
+			limit: "1000",
+			latitude: mapBounds.lat.toString(),
+			longitude: mapBounds.lon.toString(),
+			distance: mapBounds.distance.toString(),
+		});
+
+		return `/reports/?${params.toString()}`;
+	};
+
+    const { data, error: issuesError, isLoading } = useSWRInfinite<Report[]>(
+        getKey,
+        fetcher,
+        { 
+            revalidateFirstPage: false,
+            persistSize: true 
+        }
+    );
+
+	const issuesData = data ? data.flat() : []
 
 	// Основной эффект для инициализации карты.
 	useEffect(() => {
@@ -89,12 +154,6 @@ function DarkMapSPB() {
             if (clientWidth > 0 && clientHeight > 0) {
                 console.log("Map target has dimensions, initializing map...");
 
-				const extentSPB = [
-					// Примерный bbox для Российской Федерации (без учёта anti-meridian wrap)
-					...fromLonLat([19.6389, 41.185]), // запад/юг (Калининград / юг РФ)
-					...fromLonLat([180, 82.0]), // восток (до 180°) / север (мыс Челюскин)
-				];
-
                 const map = new Map({
                     target: currentMapTarget,
                     layers: [
@@ -105,26 +164,38 @@ function DarkMapSPB() {
                         tempMarkerLayerRef.current,
                     ],
                     view: new View({
-                        center: fromLonLat([30.3, 59.95]),
+                        center: mapBounds ? fromLonLat([mapBounds.lon, mapBounds.lat]) : DefaultCenter,
                         zoom: 10,
                         maxZoom: 20,
-                        extent: extentSPB,
+                        extent: extentRussia,
                     }),
-                    controls: defaultControls({ zoom: new Zoom({ duration: 250 }) }),
+                    controls: defaultControls({ zoom: true }),
                 });
 
                 mapRef.current = map;
 
                 const popup = new Overlay({
                     element: document.getElementById("map-popup")!,
-                    autoPan: true,
-                    autoPanAnimation: { duration: 250 },
+                    autoPan: false,
+                    
                 });
                 map.addOverlay(popup);
 
-                map.updateSize();
                 console.log("Initial map.updateSize() called after dimensions check.");
 
+				// Inside checkDimensionsAndInitialize, after map is created:
+				map.on("moveend", () => {
+					const view = map.getView();
+					const center = toLonLat(view.getCenter()!);
+					const extent = view.calculateExtent(map.getSize());
+					const distance = getWidth(extent) / 2000;
+
+					setMapBounds({
+						lon: center[0],
+						lat: center[1],
+						distance: distance
+					});
+				});
 
                 // Обработчик клика по карте
                 map.on("click", (event) => {
@@ -143,7 +214,8 @@ function DarkMapSPB() {
                         // Если клик был по существующей метке заявки
                         const clickedIssueId = feature.get('issueId');
                         // Находим полную информацию о заявке по ID из загруженных данных
-                        const clickedIssue = issuesData?.find(issue => issue.issueId === clickedIssueId);
+                        const clickedIssue = latestIssuesDataRef.current.find(issue => issue.issueId === clickedIssueId);
+						console.log("clicked iss", clickedIssue, issuesData)
 
                         if (clickedIssue) {
                             const coordinate = (feature.getGeometry() as Point).getCoordinates();
@@ -151,6 +223,7 @@ function DarkMapSPB() {
                             // Устанавливаем информацию о кликнутой заявке для попапа
                             setPopupInfo({ coordinate: lonLat, pixel: event.pixel, issue: clickedIssue });
                             popup.setPosition(coordinate);
+							moveTo(map, coordinate)
                         }
 
                     } else {
@@ -168,24 +241,7 @@ function DarkMapSPB() {
                         // Поле 'issue' отсутствует, что используется для определения типа попапа
                         setPopupInfo({ coordinate: lonLat, pixel: event.pixel });
                         popup.setPosition(coordinate);
-                    }
-                });
-
-                // Обработчик изменения центра карты
-                map.getView().on("change:center", () => {
-                    const view = map.getView();
-                    const center = view.getCenter();
-                    if (!center) return;
-                    const [minX, minY, maxX, maxY] = extentSPB;
-                    let [x, y] = center;
-
-                    if (x < minX) x = minX;
-                    if (x > maxX) x = maxX;
-                    if (y < minY) y = minY;
-                    if (y > maxY) y = maxY;
-
-                    if (x !== center[0] || y !== center[1]) {
-                        view.setCenter([x, y]);
+						moveTo(map, coordinate)
                     }
                 });
 
@@ -245,38 +301,123 @@ function DarkMapSPB() {
 			tempMarkerSourceRef.current.clear();
 		};
     // Этот эффект должен запускаться когда обновляются завки
+	}, []);
+
+	useEffect(() => {
+		if(isLoading) return
+		latestIssuesDataRef.current = issuesData || [];
+		const source = issueMarkerSourceRef.current;
+		if (!issuesData) return;
+
+		const existingFeatures = source.getFeatures();
+		const existingFeaturesMap = new Map();
+		existingFeatures.forEach(el => {
+			existingFeaturesMap.set(el.get('issueId').toString(), el)
+		})
+
+		const newDataIds = new Set(latestIssuesDataRef.current.map(i => i.issueId));
+		// 1. REMOVE: If it's on map but gone from DB
+		existingFeatures.forEach(feature => {
+			const id = feature.get('issueId');
+			if (!newDataIds.has(id)) {
+				source.removeFeature(feature);
+			}
+		});
+
+		// 2. PROCESS DATA: Add new or Update existing
+		issuesData.forEach(issue => {
+			const existingFeature = existingFeaturesMap.get(issue.issueId.toString());
+
+			if (existingFeature) {
+				// CASE: UPDATE
+				// This updates the metadata without touching the geometry/icon.
+				// No blinking occurs.
+				existingFeature.setProperties({
+					shortDescription: issue.shortDescription,
+					userName: issue.userName,
+					userPoints: issue.userPoints,
+					typeName: issue.typeName,
+				});
+			} else {
+				// CASE: ADD
+				if (!issue.latitude || !issue.longitude) return;
+				const lat = parseFloat(issue.latitude);
+				const lon = parseFloat(issue.longitude);
+
+				if (!isNaN(lat) && !isNaN(lon)) {
+					const marker = new Feature({
+						geometry: new Point(fromLonLat([lon, lat])),
+						issueId: issue.issueId,
+						shortDescription: issue.shortDescription,
+						userName: issue.userName,
+						userPoints: issue.userPoints,
+						typeName: issue.typeName,
+					});
+					source.addFeature(marker);
+				}
+			}
+		});
 	}, [issuesData]);
 
-	// Эффект для добавления ПЕРСИСТЕНТНЫХ меток при загрузке данных о заявках или их изменении
-	useEffect(() => {
-		console.log("Issues data effect running");
-		if (issuesData) {
-			issueMarkerSourceRef.current.clear();
+	
+useEffect(() => {
+	if (!mapRef.current || isFirstLoadHandled.current) return;
+	const map = mapRef.current
 
-			issuesData.forEach(issue => {
-				if (issue.latitude && issue.longitude) {
-					const latitude = parseFloat(issue.latitude);
-					const longitude = parseFloat(issue.longitude);
+	const searchParams = new URLSearchParams(location.search)
+    const longitude = searchParams.get("longitude") || ''
+    const latitude = searchParams.get("latitude") || ''
+    const issueId = searchParams.get("issueId") || ''
 
-					if (!isNaN(latitude) && !isNaN(longitude) && (latitude !== 0 || longitude !== 0)) {
-						const coordinate = fromLonLat([longitude, latitude]);
+	let coordinate: Coordinate | undefined = undefined
 
-						const marker = new Feature({
-							geometry: new Point(coordinate),
-							// Добавляем свойства к метке, включая данные пользователя и тип
-							issueId: issue.issueId,
-							shortDescription: issue.shortDescription,
-							userName: issue.userName,
-							userPoints: issue.userPoints,
-							typeName: issue.typeName, // Добавляем тип заявки в свойства метки
-						});
-
-						issueMarkerSourceRef.current.addFeature(marker);
-					}
-				}
-			});
+	if (issueId) {
+		const issue = latestIssuesDataRef.current.find(i => i.issueId === parseInt(issueId));
+		if (issue?.latitude && issue?.longitude) {
+			coordinate = fromLonLat([parseFloat(issue.longitude), parseFloat(issue.latitude)]);
 		}
-	}, [issuesData]); // Зависимости эффекта: issuesData
+	} else if (longitude && latitude) {
+		coordinate = fromLonLat([parseFloat(longitude), parseFloat(latitude)]);
+	} else {
+		if(isFetchingIp.current) return
+		isFetchingIp.current = true
+		fetch('https://api.ipify.org?format=json')
+		.then(response => response.json())
+		.then(data => 
+			{
+				if(!data.ip) throw new Error("no ip received")
+				return fetch(`http://ip-api.com/json/${data.ip}`)
+			}
+		)
+		.then(response => response.json())
+		.then(data => {
+			console.log(data)
+			const point = new Point([data.lon, data.lat])
+			if(point.intersectsExtent(extentRussia)) {
+				moveTo(map, fromLonLat([data.lon, data.lat]), 12)
+			} else {
+				moveTo(map, DefaultCenter, 12)
+			}
+			isFirstLoadHandled.current = true
+		}).catch(error => {
+			console.log(error)
+		}).finally(()=> {
+			isFetchingIp.current = false
+		})
+	}
+	if(coordinate) {
+		isFirstLoadHandled.current = true
+		setTimeout(() => {
+			const pixel = map.getPixelFromCoordinate(coordinate);
+			if (!pixel) return;
+			pixel[1]-=10 // ^ чтобы попасть на всплывашку
+			const event = new MapBrowserEvent<KeyboardEvent | WheelEvent | PointerEvent>("click", map, new PointerEvent("click"));
+			event.coordinate = coordinate
+			event.pixel = pixel
+			map.dispatchEvent(event);
+		}, 100)
+	}
+}, [issuesData]);
 
 	// Обработчик кнопки "Создать заявку"
 	const handleCreateReport = () => {
@@ -343,9 +484,26 @@ function DarkMapSPB() {
 					top: "5px",
 					right: "5px"
 				}}
+				title="закрыть"
 				>
 					<SquareX />
 				</div>
+				{popupInfo?.issue && (
+					<div onClick={() => {
+						if(popupInfo.issue) {
+							navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.REPORTS}/${popupInfo.issue.issueId}`);
+						}
+					}}
+					style={{
+						position: "absolute",
+						top: "35px",
+						right: "5px"
+					}}
+					title="подробнее"
+					>
+						<EyeIcon />
+					</div>
+				)}
 				{/* Проверяем, есть ли информация в popupInfo перед отображением содержимого */}
 				{popupInfo && (
 					<div>

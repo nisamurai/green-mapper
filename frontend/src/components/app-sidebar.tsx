@@ -50,6 +50,11 @@ export const PagesData = {
 					title: "Заявки",
 					url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}`,
 				},
+				// {
+				// 	title: "Создать заявку",
+				// 	show: false,
+				// 	url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.CREATE_REPORT}`,
+				// },
 			],
 		},
 		{

@@ -53,6 +53,8 @@ interface CreateReportState {
 	longitude?: string | number;
 }
 
+const maxFilesCount = 3
+
 export const DashboardCreateReport = () => {
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -76,10 +78,9 @@ export const DashboardCreateReport = () => {
 	const [shortDescription, setShortDescription] = useState("");
 	const [detailedDescription, setDetailedDescription] = useState("");
 	const [address, setAddress] = useState("");
-	const [file, setFile] = useState<File | null>(null); // Состояние для файла
-	const [photoPreview, setPhotoPreview] = useState<string | null>(null); // Превью фото
+	const [files, setFiles] = useState<File[]>([]); // Состояние для файла
+	const [photoPreviews, setPhotoPreviews] = useState<string[]>([]); // Превью фото
 	const [isFromQuickReport, setIsFromQuickReport] = useState(false); // Флаг быстрого отчёта
-	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	// Read coordinates from URL parameters and location.state on component mount
 	useEffect(() => {
@@ -93,10 +94,10 @@ export const DashboardCreateReport = () => {
 				setLongitude(String(state.longitude));
 			}
 			if (state.photo) {
-				setFile(state.photo);
+				setFiles([state.photo]);
 				// Создаём превью для переданного фото
 				const previewUrl = URL.createObjectURL(state.photo);
-				setPhotoPreview(previewUrl);
+				setPhotoPreviews([previewUrl]);
 				setIsFromQuickReport(true);
 			}
 			// Очищаем state после использования, чтобы при возврате не было проблем
@@ -120,11 +121,11 @@ export const DashboardCreateReport = () => {
 	// Очистка URL превью при размонтировании
 	useEffect(() => {
 		return () => {
-			if (photoPreview) {
-				URL.revokeObjectURL(photoPreview);
+			if (photoPreviews.length) {
+				photoPreviews.forEach(photo => URL.revokeObjectURL(photo));
 			}
 		};
-	}, [photoPreview]);
+	}, [photoPreviews]);
 
 	// Function to clear all form fields
 	const handleCancel = () => {
@@ -134,9 +135,9 @@ export const DashboardCreateReport = () => {
 		setShortDescription("");
 		setDetailedDescription("");
 		setAddress("");
-		setFile(null);
+		setFiles([]);
 		// Можно также перенаправить пользователя обратно на карту, если нужно
-		// navigate(`/${FRONT_PATHS.APP}`);
+		navigate(`/${FRONT_PATHS.APP}`);
 	};
 
 	// Function to handle form submission
@@ -153,36 +154,53 @@ export const DashboardCreateReport = () => {
 		) {
 			// Обновленное многострочное сообщение об ошибке с использованием JSX и <br />
 			toast.error(
-				<div>
-					Пожалуйста, заполните все обязательные поля:
-					<br />- координаты [автоматически заполняются из карты],
-					<br />- тип проблемы,
-					<br />- краткое описание,
-					<br />- адрес
-				</div>,
-			);
+        <div>
+          Пожалуйста, заполните все обязательные поля:
+          {(!latitude || !longitude) && (
+            <>
+              <br />- координаты [автоматически заполняются из карты],
+            </>
+          )}
+          {selectedIssueTypeId === null && (
+            <>
+              <br />- тип проблемы,
+            </>
+          )}
+          {!shortDescription && (
+            <>
+              <br />- краткое описание,
+            </>
+          )}
+          {!address && (
+            <>
+              <br />- адрес
+            </>
+          )}
+        </div>,
+      );
 			return;
 		}
 		// Подготовка данных для отправки
-		const reportData = {
-			latitude: latitude,
-			longitude: longitude,
-			typeId: selectedIssueTypeId, // Отправляем ID типа проблемы
-			shortDescription: shortDescription,
-			detailedDescription: detailedDescription || undefined, // Отправляем undefined, если пустое
-			address: address,
-			// file: file, // Пока не отправляем файл
-		};
+		const reportData = new FormData()
+		reportData.append("latitude", latitude)
+		reportData.append("longitude", longitude)
+		reportData.append("typeId", selectedIssueTypeId.toString())
+		reportData.append("shortDescription", shortDescription)
+		reportData.append("address", address)
+		if(detailedDescription) {
+			reportData.append("detailedDescription", detailedDescription)
+		}
+		files.forEach(file => {
+			reportData.append("files", file)
+		})
 
 		try {
 			// Отправка данных на бэкенд с помощью fetcher
 			// Предполагается, что fetcher уже парсит JSON и обрабатывает базовые ошибки HTTP
 			const responseData = await fetcher("/reports/", {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(reportData),
+
+				body: reportData,
 			});
 
 			// Проверяем, успешно ли создана заявка по наличию issueId в ответе
@@ -190,7 +208,9 @@ export const DashboardCreateReport = () => {
 				toast.success("Заявка успешно создана!");
 				toast.success("Вам начислен +1 балл :)");
 				// Перенаправляем пользователя на страницу со списком заявок
-				navigate(`../${FRONT_PATHS.REPORTS}`);
+				setTimeout(() => {
+					navigate(`../${FRONT_PATHS.REPORTS}?showMyOnly=true`);
+				}, 100)
 			} else {
 				// Если fetcher не выбросил ошибку, но issueId отсутствует,
 				// возможно, fetcher возвращает объект ошибки или null при неудаче,
@@ -343,19 +363,42 @@ export const DashboardCreateReport = () => {
 										required
 									/>
 								</div>
-								<div className="grid w-full max-w-sm items-center gap-2.5 min-w-0">
-									<Label htmlFor="picture">Фото</Label>
-									{photoPreview ? (
+								<div className="grid w-full max-w-full items-center min-w-0">
+									<div className="flex justify-between">
+									<Label htmlFor="picture">
+										Загруженные фото: 
+									<span className="text-gray-500 text-xs  relative top-[1px]">{files.length}/{maxFilesCount}</span>
+									</Label>
+									{photoPreviews.length !== 0 && (
+										<Button
+										  variant="outline"
+										  className="text-xs"
+										  onClick={() => {
+										  	setFiles([]);
+										  	setPhotoPreviews([])
+										  }}
+										>
+											Убрать
+										</Button>
+									)}
+									</div>
+
+									{/* Пока не обрабатываем загрузку файла на бэкенде */}
+									{photoPreviews.length ? (
 										<div className="relative w-full">
-											<img
-												src={photoPreview}
-												alt="Предпросмотр фото"
-												className="w-full h-auto rounded-md border"
-											/>
+											{photoPreviews.map((photoPreview, index) => (
+													<img
+													key={photoPreview}
+													src={photoPreview}
+													alt={`Загруженное фото ${index+1}`}
+													className="w-full h-auto rounded-md border mt-4"
+													/>
+													)
+											)}
 											{isFromQuickReport && (
 												<p className="text-xs text-green-600 mt-1">
-													✓ Фото загружено с камеры
-												</p>
+												✓ Фото загружено с камеры
+											</p>
 											)}
 										</div>
 									) : (
@@ -363,8 +406,27 @@ export const DashboardCreateReport = () => {
 											id="picture"
 											type="file"
 											accept="image/*"
-											onChange={(e) =>
-												setFile(e.target.files ? e.target.files[0] : null)
+											className="mt-4"
+											multiple
+											onChange={(e) => {
+												if(e.target.files) {
+													let loadedFiles = Array.from(e.target.files)
+													if(loadedFiles.length > maxFilesCount) {
+														loadedFiles = loadedFiles.splice(0, maxFilesCount)
+														toast.error(`Максимальное количество загружаемых файлов: ${maxFilesCount}`)
+													}
+													const urls: string[] = []
+													setFiles(loadedFiles)
+													loadedFiles.forEach(file => {
+														urls.push(URL.createObjectURL(file))
+													})
+													setPhotoPreviews(urls)
+													setIsFromQuickReport(false);
+												} else {
+													setFiles([]);
+													setPhotoPreviews([])
+												}
+											}
 											}
 										/>
 									)}

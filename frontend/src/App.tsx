@@ -9,6 +9,7 @@ import {
 	DashboardProfile, 
 	DashboardReports, 
 	DashboardReportsPanel, 
+	DashboardViewReport,
 	Login, 
 	TwoFactor,
 	SignUp, 
@@ -30,6 +31,7 @@ function App() {
 
 				<Route path={FRONT_PATHS.APP} element={<AppLayout />}>
 					<Route index element={<Home />} />
+					<Route path={`${FRONT_PATHS.REPORTS}/:id`} element={<DashboardViewReport />} />
 					<Route path={FRONT_PATHS.DASHBOARD} element={<DashboardLayout />}>
 						<Route path={FRONT_PATHS.PROFILE} element={<DashboardProfile />} />
 						<Route path={FRONT_PATHS.REPORTS} element={<DashboardReports />} />

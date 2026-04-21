@@ -6,7 +6,7 @@
         # Аналогично настройке proxy в vite.config.ts:
         #   "/api" -> http://localhost:3000 (с обрезкой префикса /api)
         handle_path /api/* {
-            reverse_proxy http://greenmapper-backend-app:3000
+            reverse_proxy replace_me
         }
 
         # Все остальные запросы обслуживаем как SPA (React / Vite)

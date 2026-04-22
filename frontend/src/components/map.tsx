@@ -15,6 +15,9 @@ import { Style, Icon } from "ol/style";
 import { useNavigate } from "react-router";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
+import { SquareX } from "lucide-react";
+import { FRONT_PATHS } from "@/types/paths";
+import { QuickReportButton } from "./quick-report-button";
 
 // Определите тип для заявки с учетом данных пользователя и типа
 interface Report {
@@ -281,7 +284,7 @@ function DarkMapSPB() {
 			const { coordinate } = popupInfo;
 
 			navigate(
-				`/dashboard/create-report?latitude=${coordinate[1]}&longitude=${coordinate[0]}`,
+				`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.CREATE_REPORT}?latitude=${coordinate[1]}&longitude=${coordinate[0]}`,
 			);
 		}
 	};
@@ -300,6 +303,13 @@ function DarkMapSPB() {
 		<div style={{ width: "100%", height: "100%", position: "relative" }}>
 			{/* Элемент, куда будет рендериться карта OpenLayers */}
 			<div id="map" ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
+
+			{/* Кнопка быстрого отчёта - только на мобильных устройствах */}
+			<div
+				className="fixed bottom-6 left-6 z-40 md:hidden"
+			>
+				<QuickReportButton />
+			</div>
 
 			{/* Попап для отображения информации о заявке или создания новой */}
 			<div
@@ -320,6 +330,21 @@ function DarkMapSPB() {
 					display: popupInfo ? 'block' : 'none'
 				}}
 			>
+				<div onClick={() => {
+					tempMarkerSourceRef.current.clear();
+					setPopupInfo(null)
+					// if(e.currentTarget.parentNode) {
+					// 	e.currentTarget.parentNode.setPosition(undefined);
+					// }
+				}}
+				style={{
+					position: "absolute",
+					top: "5px",
+					right: "5px"
+				}}
+				>
+					<SquareX />
+				</div>
 				{/* Проверяем, есть ли информация в popupInfo перед отображением содержимого */}
 				{popupInfo && (
 					<div>
@@ -335,7 +360,7 @@ function DarkMapSPB() {
 								<p>Создатель: {popupInfo.issue.userName || 'Неизвестно'}</p>
 								<p>Рейтинг создателя: {popupInfo.issue.userPoints !== null ? popupInfo.issue.userPoints : 'Нет данных'}</p>
 								{/* Опционально: кнопка для перехода к полной информации о заявке */}
-								{/* <button onClick={() => navigate(`/dashboard/reports/${popupInfo.issue.issueId}`)}>Подробнее</button> */}
+								{/* <button onClick={() => navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}/${popupInfo.issue.issueId}`)}>Подробнее</button> */}
 							</>
 						) : (
 							// Попап для создания новой заявки (клик по пустой области)

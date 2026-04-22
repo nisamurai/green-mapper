@@ -9,21 +9,27 @@ import {
 	text,
 	timestamp,
 	varchar,
+  pgSchema,
+  index
 } from "drizzle-orm/pg-core";
 
-export const user = pgTable("user", {
+const authSchema = pgSchema("auth");
+
+
+export const user = authSchema.table("user", {
 	id: text("id").primaryKey(),
 	name: text("name").notNull(),
 	email: text("email").notNull().unique(),
 	emailVerified: boolean("email_verified").notNull(),
+	twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
 	image: text("image"),
 	createdAt: timestamp("created_at").notNull(),
 	updatedAt: timestamp("updated_at").notNull(),
 	points: integer("points").notNull().default(0),
-	role: varchar("role", { length: 5 }).$type<"user" | "admin">().default("user"),
+	role: varchar("role", { length: 10 }).$type<"user" | "admin" | "operator">().default("user"),
 });
 
-export const session = pgTable("session", {
+export const session = authSchema.table("session", {
 	id: text("id").primaryKey(),
 	expiresAt: timestamp("expires_at").notNull(),
 	token: text("token").notNull().unique(),
@@ -36,7 +42,7 @@ export const session = pgTable("session", {
 		.references(() => user.id, { onDelete: "cascade" }),
 });
 
-export const account = pgTable("account", {
+export const account = authSchema.table("account", {
 	id: text("id").primaryKey(),
 	accountId: text("account_id").notNull(),
 	providerId: text("provider_id").notNull(),
@@ -54,13 +60,22 @@ export const account = pgTable("account", {
 	updatedAt: timestamp("updated_at").notNull(),
 });
 
-export const verification = pgTable("verification", {
+export const verification = authSchema.table("verification", {
 	id: text("id").primaryKey(),
 	identifier: text("identifier").notNull(),
 	value: text("value").notNull(),
 	expiresAt: timestamp("expires_at").notNull(),
 	createdAt: timestamp("created_at"),
 	updatedAt: timestamp("updated_at"),
+});
+
+export const twoFactor = authSchema.table("twoFactor", {
+	id: text("id").primaryKey(),
+	userId: text("user_id")
+		.notNull()
+		.references(() => user.id, { onDelete: "cascade" }),
+	secret: text("secret").notNull(),
+	backupCodes: text("backup_codes").notNull(),
 });
 
 export const issueTypes = pgTable("issue_types", {
@@ -91,7 +106,10 @@ export const issues = pgTable("issues", {
   longitude: decimal("longitude", { precision: 11, scale: 8 }),
   createdAt: timestamp("created_at").defaultNow(),
   expectedResolutionDate: date("expected_resolution_date"),
-});
+}, (table) => ({
+  latitude_index: index("latitude_index").on(table.latitude),
+  longitude_index: index("longitude_index").on(table.longitude),
+}));
 
 // Фотографии
 export const photos = pgTable("photos", {
@@ -131,11 +149,27 @@ export const adminActions = pgTable("admin_actions", {
   actionDate: timestamp("action_date").defaultNow(),
 });
 
+// Действия операторов
+export const operatorActions = pgTable("operator_actions", {
+  actionId: serial("action_id").primaryKey(),
+  issueId: integer("issue_id")
+    .notNull()
+    .references(() => issues.issueId),
+  operatorId: text("operator_id")
+    .notNull()
+    .references(() => user.id),
+  actionType: varchar("action_type", { length: 50 }).notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  actionDate: timestamp("action_date").defaultNow(),
+});
+
 // Отношения
 export const usersRelations = relations(user, ({ many }) => ({
   issues: many(issues),
   comments: many(comments),
   adminActions: many(adminActions),
+  operatorActions: many(operatorActions),
 }));
 
 export const issuesRelations = relations(issues, ({ one, many }) => ({
@@ -145,6 +179,7 @@ export const issuesRelations = relations(issues, ({ one, many }) => ({
   photos: many(photos),
   comments: many(comments),
   adminActions: many(adminActions),
+  operatorActions: many(operatorActions),
 }));
 
 export const photosRelations = relations(photos, ({ one }) => ({
@@ -159,4 +194,9 @@ export const commentsRelations = relations(comments, ({ one }) => ({
 export const adminActionsRelations = relations(adminActions, ({ one }) => ({
   issue: one(issues, { fields: [adminActions.issueId], references: [issues.issueId] }),
   admin: one(user, { fields: [adminActions.adminId], references: [user.id] }),
+}));
+
+export const operatorActionsRelations = relations(operatorActions, ({ one }) => ({
+  issue: one(issues, { fields: [operatorActions.issueId], references: [issues.issueId] }),
+  operator: one(user, { fields: [operatorActions.operatorId], references: [user.id] }),
 }));

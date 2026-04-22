@@ -1,4 +1,7 @@
 import { auth } from "@/utils/auth";
+import { db } from "@/db/db";
+import * as schema from "@/db/schema";
+import { eq } from "drizzle-orm";
 import Elysia from "elysia";
 
 export const authMiddleware = new Elysia({ name: "better-auth" })
@@ -12,8 +15,12 @@ export const authMiddleware = new Elysia({ name: "better-auth" })
 
 				if (!session) return status(401);
 
+                const fullUser = await db.query.user.findFirst({
+                    where: eq(schema.user.id, session.user.id),
+                });
+
 				return {
-					user: session.user,
+					user: fullUser,
 					session: session.session,
 				};
 			},

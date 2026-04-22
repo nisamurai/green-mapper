@@ -10,6 +10,8 @@ if (!dbUrl) throw new Error("DATABASE_URL is missing");
 
 const db = drizzle(dbUrl);
 
+await db.execute(sql`CREATE SCHEMA IF NOT EXISTS auth;`);
+
 await migrate(db, { migrationsFolder: "drizzle" });
 
 console.log("Migrations applied, seeding lookup tables...");
@@ -21,6 +23,15 @@ await db.execute(
 
 await db.execute(
 	sql`insert into issue_statuses (name) values ('В обработке') on conflict (name) do nothing`,
+);
+await db.execute(
+	sql`insert into issue_statuses (name) values ('В работе') on conflict (name) do nothing`,
+);
+await db.execute(
+	sql`insert into issue_statuses (name) values ('Выполнена') on conflict (name) do nothing`,
+);
+await db.execute(
+	sql`insert into issue_statuses (name) values ('Отклонена') on conflict (name) do nothing`,
 );
 
 console.log("Seeding completed");

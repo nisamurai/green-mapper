@@ -1,0 +1,52 @@
+services:
+
+  postgres:
+    image: postgres:17.4-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: greenmapper123
+      POSTGRES_DB: greenmapper
+    ports:
+      - '5252:5432'
+
+  backend:
+    build: ./backend
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgresql://postgres:greenmapper123@postgres:5432/greenmapper
+      BETTER_AUTH_SECRET: b51ec3db616755ae4070273991147f02
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_DISABLE_LOGGER: 'true'
+    depends_on:
+      - postgres
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_BETTER_AUTH_BASE_URL: http://localhost:5173/api/auth
+        VITE_API_BASE_URL: /api
+    ports:
+      - '5173:80'
+    depends_on:
+      - backend
+
+  bg_worker:
+    build: ./bg_worker
+
+  ai_content_scanning:
+    build: ./ai_content_scanning
+    ports:
+      - '8001:8001'
+
+  cache_service:
+    build: ./cache_service
+    ports:
+      - '6379:6379'
+
+  message_broker:
+    build: ./message_broker
+    ports:
+      - '5672:5672'
+      - '15672:15672'

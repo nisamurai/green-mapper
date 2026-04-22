@@ -2,7 +2,7 @@ import { db } from "@/db/db";
 import { authMiddleware } from "@/middleware/auth";
 import Elysia, { t } from "elysia";
 import * as schema from "@/db/schema";
-import { eq, sql, and } from "drizzle-orm"; // Импортируем and для комбинирования условий
+import { and, gte, lte, sql, eq, or } from "drizzle-orm";
 
 const createReportBody = t.Object({
 	latitude: t.String(),
@@ -15,30 +15,133 @@ const createReportBody = t.Object({
 });
 
 export const reportsRouter = new Elysia({ prefix: "/reports" })
-	.use(authMiddleware)
-	.get("/", async ({ user }) => {
-		// Запрос для получения списка заявок с данными пользователя
-		return db.select({
-			issueId: schema.issues.issueId,
-			shortDescription: schema.issues.shortDescription,
-			detailedDescription: schema.issues.detailedDescription,
-			address: schema.issues.address,
-			latitude: schema.issues.latitude,
-			longitude: schema.issues.longitude,
-			createdAt: schema.issues.createdAt,
-			expectedResolutionDate: schema.issues.expectedResolutionDate,
-			statusName: schema.issueStatuses.name,
-			typeName: schema.issueTypes.name,
-			userName: schema.user.name,
-			userPoints: schema.user.points,
-            statusId: schema.issues.statusId // Добавляем statusId для удобства на фронтенде
-		})
-			.from(schema.issues)
-			.leftJoin(schema.user, eq(schema.issues.userId, schema.user.id))
-			.leftJoin(schema.issueStatuses, eq(schema.issues.statusId, schema.issueStatuses.statusId))
-			.leftJoin(schema.issueTypes, eq(schema.issues.typeId, schema.issueTypes.typeId));
-	}, { auth: true })
-	.get(
+  .use(authMiddleware)
+  .get(
+    "/",
+    async ({ query }) => {
+      const {
+        latitude,
+        longitude,
+        distance,
+        limit,
+        skip,
+        userId
+      } = query;
+
+      const filters = [];
+
+      if (userId) {
+        filters.push(eq(schema.issues.userId, userId));
+      }
+
+      if (distance && distance > 0) {
+        
+          // Convert distance from kilometers to degrees (approximate)
+          // 1 degree of latitude ≈ 111 km
+          const latRange = distance / 111;
+          
+          if (latitude && !isNaN(latitude)) {
+              filters.push(
+                and(
+                  gte(schema.issues.latitude, (latitude - latRange).toString()),
+                  lte(schema.issues.latitude, (latitude + latRange).toString())
+                )
+              );
+            }
+          
+          if (longitude && !isNaN(longitude)) {
+              let lngRange = latRange;
+              
+              if (latitude && !isNaN(longitude)) {
+                  // Adjust longitude range based on latitude
+                  // cos(latitude in radians) * 111 km per degree at equator
+                  lngRange = distance / (111 * Math.cos(latitude * Math.PI / 180));
+              }
+              const leftCond = (
+                longitude - lngRange < -180
+                 ?
+                  or(
+                   gte(schema.issues.longitude, (longitude - lngRange).toString())
+                   ,
+                   gte(schema.issues.longitude, (longitude - lngRange+360).toString())
+                  )
+                 :
+                  gte(schema.issues.longitude, (longitude - lngRange).toString()));
+
+              const rightCond = (
+                longitude + lngRange > 180
+                 ?
+                  or(
+                   lte(schema.issues.longitude, (longitude + lngRange).toString())
+                   ,
+                   lte(schema.issues.longitude, (longitude + lngRange-360).toString())
+                  )
+                 :
+                  lte(schema.issues.longitude, (longitude + lngRange).toString()));
+              filters.push(
+                and(
+                  leftCond,
+                  rightCond
+                )
+              );
+            }
+      }
+
+      const queryBuilder = db
+        .select({
+          issueId: schema.issues.issueId,
+          shortDescription: schema.issues.shortDescription,
+          detailedDescription: schema.issues.detailedDescription,
+          address: schema.issues.address,
+          latitude: schema.issues.latitude,
+          longitude: schema.issues.longitude,
+          createdAt: schema.issues.createdAt,
+          expectedResolutionDate: schema.issues.expectedResolutionDate,
+          statusName: schema.issueStatuses.name,
+          typeName: schema.issueTypes.name,
+          userName: schema.user.name,
+          userPoints: schema.user.points,
+          statusId: schema.issues.statusId
+        })
+        .from(schema.issues)
+        .leftJoin(schema.user, eq(schema.issues.userId, schema.user.id))
+        .leftJoin(schema.issueStatuses, eq(schema.issues.statusId, schema.issueStatuses.statusId))
+        .leftJoin(schema.issueTypes, eq(schema.issues.typeId, schema.issueTypes.typeId))
+        .where(filters.length > 0 ? and(...filters) : undefined);
+
+      // Apply pagination
+      const paginatedQuery = (limit !== undefined && limit !== null)
+        ? queryBuilder.limit(limit).offset(skip || 0)
+        : queryBuilder;
+
+      const reports = await paginatedQuery;
+
+      return reports;
+    },
+    {
+      auth: false,
+      query: t.Object({
+        latitude: t.Optional(t.Numeric()),
+        longitude: t.Optional(t.Numeric()),
+        distance: t.Optional(t.Numeric({
+          description: "Distance in kilometers for bounding box"
+        })),
+        
+        limit: t.Optional(t.Numeric({
+          minimum: 0,
+          description: "Number of items to return (if omitted, returns all)"
+        })),
+        skip: t.Optional(t.Numeric({
+          minimum: 0,
+          description: "Number of items to skip (only used with limit)"
+        })),
+        
+        userId: t.Optional(t.String({
+          description: "Filter by user ID"
+        }))
+      })
+    }
+  ).get(
 		"/:id",
 		async ({ params: { id }, status }) => {
 			// Запрос для получения одной заявки по ID (может быть расширен при необходимости)
@@ -130,8 +233,8 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
     // !!! НОВЫЙ ЭНДПОИНТ ДЛЯ УДАЛЕНИЯ ЗАЯВКИ (ТОЛЬКО ДЛЯ АДМИНА) !!!
     .delete("/:id", async ({ params: { id }, user, set }) => {
         // Проверяем, авторизован ли пользователь и является ли он админом
-        if (!user || user.role !== 'admin') {
-            set.status = 403; // Forbidden
+        if (!user || (user.role !== 'admin' && user.role !== "operator")) {
+			set.status = 403; // Forbidden
             return { error: "Forbidden" };
         }
 
@@ -161,33 +264,47 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
     // !!! НОВЫЙ ЭНДПОИНТ ДЛЯ ИЗМЕНЕНИЯ СТАТУСА ЗАЯВКИ (ТОЛЬКО ДЛЯ АДМИНА) !!!
     .put("/:id/status", async ({ params: { id }, body, user, set }) => {
         // Проверяем, авторизован ли пользователь и является ли он админом
-        if (!user || user.role !== 'admin') {
-            set.status = 403; // Forbidden
+        if (!user || (user.role !== 'admin' && user.role !== "operator")) {
+			set.status = 403; // Forbidden
             return { error: "Forbidden" };
         }
 
+		const { statusId } = body
+
         // Проверяем, что в теле запроса пришел корректный statusId
-        const updateStatusBody = t.Object({
-            statusId: t.Number()
-        });
+        // const updateStatusBody = t.Object({
+		// 	statusId: t.Number()
+        // });
 
-        const validationResult = updateStatusBody.safeParse(body);
+		// console.log(body)
+		// let validationResult
+		// try {
+		// 	validationResult = updateStatusBody.safeParse(body);
 
-        if (!validationResult.success) {
-            set.status = 400; // Bad Request
-            return { error: "Invalid request body. 'statusId' (number) is required." };
-        }
-
-        const { statusId } = validationResult.data;
+		// }
+		// catch (e) {
+		// 	console.log(e)
+		// }
+		
+        // if (!validationResult.success) {
+		// 	set.status = 400; // Bad Request
+        //     return { error: "Invalid request body. 'statusId' (number) is required." };
+        // }
+		
+        // const { statusId } = validationResult.data;
+		if(!id) {
+			    return { error: "Invalid request body. 'statusId' (number) is required." };
+		}
 
         // Опционально: Проверить, существует ли статус с таким ID в таблице issueStatuses
-        // const statusExists = await db.query.issueStatuses.findFirst({
-        //     where: eq(schema.issueStatuses.statusId, statusId)
-        // });
-        // if (!statusExists) {
-        //     set.status = 400;
-        //     return { error: `Status with ID ${statusId} not found.` };
-        // }
+        const statusExists = await db.query.issueStatuses.findFirst({
+            where: eq(schema.issueStatuses.statusId, statusId)
+        });
+		console.log("t", statusExists)
+        if (!statusExists) {
+            set.status = 400;
+            return { error: `Status with ID ${statusId} not found.` };
+        }
 
 
         try {
@@ -212,7 +329,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         }
     }, {
         params: t.Object({ id: t.Number() }),
-        body: t.Any(), // Используем t.Any() здесь, так как валидация тела происходит внутри
+        body: t.Object({ statusId: t.Number() }),
         auth: true // Требуется аутентификация
     });
 

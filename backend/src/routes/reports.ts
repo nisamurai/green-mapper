@@ -353,10 +353,16 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 
             const deletedIssues = await tx.delete(schema.issues)
                 .where(eq(schema.issues.issueId, id))
-                .returning({ issueId: schema.issues.issueId });
+                .returning({ issueId: schema.issues.issueId, userId: schema.issues.userId });
             
             if (deletedIssues.length === 0) {
                 throw new Error(`Issue with ID ${id} not found.`);
+            }
+
+            if (serviceRequest) {
+                await tx.update(schema.user)
+                    .set({ points: sql`GREATEST(${schema.user.points} - 1, 0)` })
+                    .where(eq(schema.user.id, deletedIssues[0].userId));
             }
             
             deletedIssueId = deletedIssues[0].issueId;
@@ -427,19 +433,45 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 
 
         try {
-            // Обновляем статус заявки по ID
-            const updatedIssues = await db.update(schema.issues)
-                .set({ statusId: statusId })
-                .where(eq(schema.issues.issueId, id))
-                .returning({ issueId: schema.issues.issueId, statusId: schema.issues.statusId }); // Возвращаем ID и новый статус
+            const updatedIssue = await db.transaction(async (tx) => {
+                const existingIssue = await tx.query.issues.findFirst({
+                    where: eq(schema.issues.issueId, id),
+                    columns: {
+                        issueId: true,
+                        statusId: true,
+                        userId: true,
+                    }
+                });
 
-            if (updatedIssues.length === 0) {
+                if (!existingIssue) {
+                    return null;
+                }
+                // Обновляем статус заявки по ID
+                const updatedIssues = await tx.update(schema.issues)
+                    .set({ statusId: statusId })
+                    .where(eq(schema.issues.issueId, id))
+                    .returning({ issueId: schema.issues.issueId, statusId: schema.issues.statusId }); //Возвращаем ID заявки и статус
+
+                if (
+                    !serviceRequest &&
+                    statusId === 4 &&
+                    existingIssue.statusId !== 4
+                ) {
+                    await tx.update(schema.user)
+                        .set({ points: sql`GREATEST(${schema.user.points} - 1, 0)` })
+                        .where(eq(schema.user.id, existingIssue.userId));
+                }
+
+                return updatedIssues[0];
+            });
+
+            if (!updatedIssue) {
                 set.status = 404; // Not Found
                 return { error: `Issue with ID ${id} not found.` };
             }
 
             set.status = 200; // OK
-            return { success: true, issue: updatedIssues[0] };
+            return { success: true, issue: updatedIssue };
 
         } catch (error) {
             console.error(`Error updating status for issue with ID ${id}:`, error);

@@ -1,6 +1,7 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
 	boolean,
+  check,
 	date,
 	decimal,
 	integer,
@@ -27,7 +28,9 @@ export const user = authSchema.table("user", {
 	updatedAt: timestamp("updated_at").notNull(),
 	points: integer("points").notNull().default(0),
 	role: varchar("role", { length: 10 }).$type<"user" | "admin" | "operator">().default("user"),
-});
+}, (table) => ({
+	pointsNonNegative: check("user_points_non_negative", sql`${table.points} >= 0`),
+}));
 
 export const session = authSchema.table("session", {
 	id: text("id").primaryKey(),

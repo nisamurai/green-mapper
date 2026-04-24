@@ -18,6 +18,16 @@ export function QuickReportButton(
     const videoRef = React.useRef<HTMLVideoElement>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+
+    const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (error) => reject(error);
+    });
+    };
+
     const requestGeolocation = () => {
         if (!navigator.geolocation) {
             throw new Error("Геолокация в этом браузере недоступна.");
@@ -82,9 +92,10 @@ export function QuickReportButton(
         }
     };
 
-    const navigateToCreateReportWithPhoto = (file: File) => {
+    const navigateToCreateReportWithPhoto = async (file: File) => {
         // Используем переданные координаты напрямую (из takePhoto)
-        if (capturedCoords?.latitude && capturedCoords?.longitude) {
+        localStorage.setItem("photo", await fileToBase64(file))
+        if (capturedCoords?.latitude && capturedCoords?.longitude || true) {
             const path = `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.CREATE_REPORT}?latitude=${capturedCoords.latitude}&longitude=${capturedCoords.longitude}`
             navigate(path, {
                 state: {
@@ -178,11 +189,12 @@ export function QuickReportButton(
       } else {
         try {
           const coords = requestGeolocation();
-          if (coords.latitude === "" || coords.longitude === "")
-            throw new Error("wrong coords");
+        //   if (coords.latitude === "" || coords.longitude === "")
+        //     throw new Error("wrong coords");
           setCapturedCoords(coords);
           openCamera();
         } catch (e) {
+            console.error(e)
           setErrorMessage(
             "Не удалось получить ваше местоположение. Разрешите доступ к геолокации в браузере. Нажмите «ОК», чтобы вернуться на карту.",
           );

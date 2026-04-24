@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 OLLAMA_API_URL = f"http://{os.getenv("OLLAMA_HOST")}/api/chat"
 MODEL = os.getenv("OLLAMA_MODEL")
 SKIP_LLM = os.getenv("SKIP_LLM") == "true"
-
+OLLAMA_API_URL = f"http://10.252.134.235:28080/api/chat"
+MODEL = "llava:7b"
+SKIP_LLM = os.getenv("SKIP_LLM") == "true"
 timeout = ClientTimeout(total=10)
 retry_options = RandomRetry(attempts=5)
 
@@ -54,17 +56,14 @@ async def moderate_image(issue: dict, files: list[bytes]) -> dict:
             {
                 "role": "system",
                 "content": (
-                    "Ты модератор изображений для заявок граждан. "
-                    "Твоей задачей является модерация заявок, оставленных просыми людьми "
-                    "Тебе необходимо проанализировать все поля в заданном json заявки, "
-                    "а также изображения, прикрепленные к заявке, ели они есть."
+                    "Ты модератор изображений для городских заявок. "
+                    "Анализируй только то, что видно на изображении. "
                     "Запрещенным считай: порнографию/обнаженку, жестокость, кровь и шок-контент, "
                     "самоповреждение, оружие, наркотики, экстремистскую символику. "
-                    "Несоответвие изображения данным заявки не является основанием для её отклонения, "
-                    "Однако о несоответвии можно сообщить в поле message"
                     "Ответ верни строго в JSON: "
                     '{"verified": true|false, "message": "..."}. '
-                    "Если verified=false, message должен быть пояснением на русском."
+                    "Если verified=true, message должен быть пустой строкой. "
+                    "Если verified=false, message должен быть коротким пояснением на русском."
                 ),
             },
             {
@@ -79,7 +78,8 @@ async def moderate_image(issue: dict, files: list[bytes]) -> dict:
         ],
     }
 
-    body = json.dumps(payload).encode("utf-8")
+    body = json.dumps(payload, ensure_ascii=False)
+    
     try:
         async with ClientSession(timeout=timeout) as session:
             retry_client = RetryClient(session)
@@ -87,12 +87,13 @@ async def moderate_image(issue: dict, files: list[bytes]) -> dict:
                 OLLAMA_API_URL,
                 headers={"Content-Type": "application/json"},
                 retry_options=retry_options,
-                json=body
+                data=body
             ) as request:
                 request.raise_for_status()
 
                 raw = await request.json()
-                response = json.loads(raw)
+                # response = json.loads(raw)
+                response = raw
     except Exception as e:
         logger.error(f"ошибка при обращении к ollama: {e}", exc_info=True)
         raise e
@@ -142,11 +143,12 @@ async def main() -> int:
         base = item["image_base"]
         try:
             images = [read_image_bytes(file) for file in base]
-            result = moderate_image(item["request_data"], images)
+            result = await moderate_image(item["request_data"], images)
             print(f"\n=== test {index} ===")
             print(json.dumps(result, ensure_ascii=False, indent=2))
         except Exception as e:
             has_error = True
+            print(e)
             print(f"\n=== {base} ===")
             print(f"ERROR: {e}")
 

@@ -21,7 +21,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { FRONT_PATHS } from "@/types/paths";
 
 interface Fields {
@@ -59,6 +59,7 @@ const schema = z
 export const SignUp = () => {
 	const [isPending, setIsPending] = useState(false);
 	const navigate = useNavigate();
+	const location = useLocation()
 	const form = useForm<Fields>({
 		resolver: zodResolver(schema),
 		defaultValues: {
@@ -81,7 +82,7 @@ export const SignUp = () => {
 			fetchOptions: {
 				onSuccess: (...params) => {
 					console.log(...params);
-					navigate(redirectTo, { replace: true });
+					navigate(redirectTo, { replace: true, state: location.state });
 				},
 			},
 		});

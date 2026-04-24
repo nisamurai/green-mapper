@@ -30,7 +30,7 @@ import { Label } from "@/components/ui/label";
 
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { useNavigate, useLocation, data } from "react-router";
 
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -55,6 +55,7 @@ interface CreateReportState {
 
 const maxFilesCount = 3
 
+
 export const DashboardCreateReport = () => {
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -70,6 +71,21 @@ export const DashboardCreateReport = () => {
 		"/reports/issue-types",
 		fetcher,
 	);
+
+	const restorePhoto = (base64) => {
+		if (base64) {
+			fetch(base64)
+			.then(res => res.blob())
+			.then(blob => {
+				const file = new File([blob], "photo.png", { type: "image/png" });
+				setFiles([file]);
+				const previewUrl = URL.createObjectURL(file);
+				setPhotoPreviews([previewUrl]);
+				localStorage.removeItem("pendingPhoto"); // Clean up
+				setIsFromQuickReport(true)
+			});
+		}
+		};
 
 	// State for latitude and longitude
 	const [latitude, setLatitude] = useState("");
@@ -101,7 +117,7 @@ export const DashboardCreateReport = () => {
 				setIsFromQuickReport(true);
 			}
 			// Очищаем state после использования, чтобы при возврате не было проблем
-			navigate(location.pathname + location.search, { replace: true });
+			// navigate(location.pathname + location.search, { replace: true });
 			return;
 		}
 
@@ -115,6 +131,11 @@ export const DashboardCreateReport = () => {
 		}
 		if (lon) {
 			setLongitude(lon);
+		}
+		const base64 = localStorage.getItem("photo");
+		if (base64) {
+			restorePhoto(base64)
+			// setFiles([fetch(fileUrl).then((res) => res.blob())]);
 		}
 	}, [location.search, location.state, navigate]);
 
@@ -207,6 +228,7 @@ export const DashboardCreateReport = () => {
 			if (responseData && responseData.issueId) {
 				toast.success("Заявка успешно создана!");
 				toast.success("Вам начислен +1 балл :)");
+				localStorage.removeItem("photo");
 				// Перенаправляем пользователя на страницу со списком заявок
 				setTimeout(() => {
 					navigate(`../${FRONT_PATHS.REPORTS}?showMyOnly=true`);

@@ -20,7 +20,7 @@ import { FRONT_PATHS } from "@/types/paths";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -36,6 +36,7 @@ const schema = z.object({
 
 export const Login = () => {
 	const [isPending, setIsPending] = useState(false);
+	const location = useLocation();
 	const navigate = useNavigate();
 	const form = useForm<Fields>({
 		resolver: zodResolver(schema),
@@ -63,8 +64,11 @@ export const Login = () => {
 							`../${FRONT_PATHS.TWO_FACTOR}?redirect=${encodeURIComponent(redirectTo)}`,
 							{
 								replace: true,
+								state: location.state
 							},
 						);
+					} else {
+						navigate(redirectTo, {state: location.state})
 					}
 				},
 			},

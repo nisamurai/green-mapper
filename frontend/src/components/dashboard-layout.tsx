@@ -12,7 +12,7 @@ export const DashboardLayout = () => {
 
   useEffect(() => {
     if (!isPending && !session) {
-      navigate(`/${FRONT_PATHS.AUTH}/${FRONT_PATHS.LOGIN}?redirect=${encodeURIComponent(location.pathname+location.search+location.hash)}`);
+      navigate(`/${FRONT_PATHS.AUTH}/${FRONT_PATHS.LOGIN}?redirect=${encodeURIComponent(location.pathname+location.search+location.hash)}`, {state: location.state});
     }
   }, [isPending, session, navigate]);
 

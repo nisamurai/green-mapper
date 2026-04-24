@@ -71,7 +71,7 @@ class RabbitMQClient:
                     await message.ack()
                     
                 else:
-                    logger.error("Max retries exceeded, sending to DLQ")
+                    logger.critical("Max retries exceeded, sending to DLQ")
                     await message.reject(requeue=False)
         
         await queue.consume(on_message)

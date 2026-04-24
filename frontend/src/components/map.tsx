@@ -386,15 +386,18 @@ useEffect(() => {
 		.then(data => 
 			{
 				if(!data.ip) throw new Error("no ip received")
-				return fetch(`http://ip-api.com/json/${data.ip}`)
+				return fetch(`/ip/json/${data.ip}`)
 			}
 		)
 		.then(response => response.json())
 		.then(data => {
 			console.log(data)
-			const point = new Point([data.lon, data.lat])
-			if(point.intersectsExtent(extentRussia)) {
-				moveTo(map, fromLonLat([data.lon, data.lat]), 12)
+			const lon = Number(data.lon);
+			const lat = Number(data.lat);
+			const projected = fromLonLat([lon, lat]);
+			const point = new Point(projected);
+			if(!Number.isNaN(lon) && !Number.isNaN(lat) && point.intersectsExtent(extentRussia)) {
+				moveTo(map, projected, 12)
 			} else {
 				moveTo(map, DefaultCenter, 12)
 			}

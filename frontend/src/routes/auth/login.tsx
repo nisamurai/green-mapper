@@ -79,14 +79,15 @@ export const Login = () => {
 
 	const loginWithYandex = async () => {
     	setIsPending(true);
-		const { error } = await authClient.signIn.social({
-			provider: "yandex",
-			callbackURL: `${window.location.origin}${redirectTo}`,
-		});
-    	if (error) {
-      		setIsPending(false);
-      		toast("Ошибка входа через Yandex");
-    	}
+		try {
+			const url = new URL(`${window.location.origin}/api/social-sign-in`);
+			url.searchParams.set("provider", "yandex");
+			url.searchParams.set("callbackURL", `${window.location.origin}${redirectTo}`);
+			window.location.assign(url.toString());
+		} catch {
+			setIsPending(false);
+			toast("Ошибка входа через Yandex");
+		}
   	};
 
 	return (

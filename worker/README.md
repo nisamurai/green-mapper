@@ -1,0 +1,1 @@
+docker build --build-arg HTTP_PROXY="http://172.17.0.1:12334" .

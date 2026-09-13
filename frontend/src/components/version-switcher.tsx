@@ -23,7 +23,7 @@ export function VersionSwitcher({
 	const [selectedCity, setselectedCity] = React.useState(defaultVersion);
 
 	return (
-		<SidebarMenu>
+		<SidebarMenu className="my-4">
 			<SidebarMenuItem>
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
@@ -36,7 +36,7 @@ export function VersionSwitcher({
 							</div>
 							<div className="flex flex-col space-y-2 leading-none">
 								<span className="font-medium">GreenMapper</span>
-								<span className="">{selectedCity}</span>
+								<span className="text-[13px]">{selectedCity}</span>
 							</div>
 							<ChevronsUpDown className="ml-auto" />
 						</SidebarMenuButton>

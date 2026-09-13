@@ -28,20 +28,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import {
-	Breadcrumb,
-	BreadcrumbItem,
-	BreadcrumbLink,
-	BreadcrumbList,
-	BreadcrumbPage,
-	BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { authClient } from "@/lib/auth";
-import { Separator } from "@radix-ui/react-separator";
-import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useLocation, data } from "react-router";
 
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -49,6 +38,7 @@ import { fetcher } from "@/lib/fetcher";
 
 // Импортируем toast из sonner
 import { toast } from "sonner";
+import { FRONT_PATHS } from "@/types/paths";
 
 // Тип для типов проблем, получаемых с бэкенда
 interface IssueType {
@@ -56,11 +46,21 @@ interface IssueType {
 	name: string;
 }
 
+// Тип для данных, передаваемых через location.state
+interface CreateReportState {
+	photo?: File;
+	latitude?: string | number;
+	longitude?: string | number;
+}
+
+const maxFilesCount = 3;
+const maxFileSizeBytes = 3 * 1024 * 1024;
+const allowedMimeTypes = new Set(["image/jpeg", "image/png"]);
+
+
 export const DashboardCreateReport = () => {
 	const navigate = useNavigate();
 	const location = useLocation();
-	const [str, setStr] = useState("GreenMapper");
-
 	// Состояние для управления открытием выпадающего списка типов проблем
 	const [open, setOpen] = React.useState(false);
 	// Состояние для выбранного ID типа проблемы
@@ -74,6 +74,21 @@ export const DashboardCreateReport = () => {
 		fetcher,
 	);
 
+	const restorePhoto = (base64) => {
+		if (base64) {
+			fetch(base64)
+			.then(res => res.blob())
+			.then(blob => {
+				const file = new File([blob], "photo.png", { type: "image/png" });
+				setFiles([file]);
+				const previewUrl = URL.createObjectURL(file);
+				setPhotoPreviews([previewUrl]);
+				localStorage.removeItem("pendingPhoto"); // Clean up
+				setIsFromQuickReport(true)
+			});
+		}
+		};
+
 	// State for latitude and longitude
 	const [latitude, setLatitude] = useState("");
 	const [longitude, setLongitude] = useState("");
@@ -81,10 +96,34 @@ export const DashboardCreateReport = () => {
 	const [shortDescription, setShortDescription] = useState("");
 	const [detailedDescription, setDetailedDescription] = useState("");
 	const [address, setAddress] = useState("");
-	const [file, setFile] = useState<File | null>(null); // Состояние для файла
+	const [files, setFiles] = useState<File[]>([]); // Состояние для файла
+	const [photoPreviews, setPhotoPreviews] = useState<string[]>([]); // Превью фото
+	const [isFromQuickReport, setIsFromQuickReport] = useState(false); // Флаг быстрого отчёта
 
-	// Read coordinates from URL parameters on component mount
+	// Read coordinates from URL parameters and location.state on component mount
 	useEffect(() => {
+		// Приоритет 1: Данные из location.state (быстрый отчёт с фото)
+		const state = location.state as CreateReportState | null;
+		if (state) {
+			if (state.latitude !== undefined) {
+				setLatitude(String(state.latitude));
+			}
+			if (state.longitude !== undefined) {
+				setLongitude(String(state.longitude));
+			}
+			if (state.photo) {
+				setFiles([state.photo]);
+				// Создаём превью для переданного фото
+				const previewUrl = URL.createObjectURL(state.photo);
+				setPhotoPreviews([previewUrl]);
+				setIsFromQuickReport(true);
+			}
+			// Очищаем state после использования, чтобы при возврате не было проблем
+			// navigate(location.pathname + location.search, { replace: true });
+			return;
+		}
+
+		// Приоритет 2: Координаты из URL параметров (клик по карте)
 		const params = new URLSearchParams(location.search);
 		const lat = params.get("latitude");
 		const lon = params.get("longitude");
@@ -95,7 +134,21 @@ export const DashboardCreateReport = () => {
 		if (lon) {
 			setLongitude(lon);
 		}
-	}, [location.search]);
+		const base64 = localStorage.getItem("photo");
+		if (base64) {
+			restorePhoto(base64)
+			// setFiles([fetch(fileUrl).then((res) => res.blob())]);
+		}
+	}, [location.search, location.state, navigate]);
+
+	// Очистка URL превью при размонтировании
+	useEffect(() => {
+		return () => {
+			if (photoPreviews.length) {
+				photoPreviews.forEach(photo => URL.revokeObjectURL(photo));
+			}
+		};
+	}, [photoPreviews]);
 
 	// Function to clear all form fields
 	const handleCancel = () => {
@@ -105,9 +158,9 @@ export const DashboardCreateReport = () => {
 		setShortDescription("");
 		setDetailedDescription("");
 		setAddress("");
-		setFile(null);
+		setFiles([]);
 		// Можно также перенаправить пользователя обратно на карту, если нужно
-		// navigate('/dashboard');
+		navigate(`/${FRONT_PATHS.APP}`);
 	};
 
 	// Function to handle form submission
@@ -124,44 +177,64 @@ export const DashboardCreateReport = () => {
 		) {
 			// Обновленное многострочное сообщение об ошибке с использованием JSX и <br />
 			toast.error(
-				<div>
-					Пожалуйста, заполните все обязательные поля:
-					<br />- координаты [автоматически заполняются из карты],
-					<br />- тип проблемы,
-					<br />- краткое описание,
-					<br />- адрес
-				</div>,
-			);
+        <div>
+          Пожалуйста, заполните все обязательные поля:
+          {(!latitude || !longitude) && (
+            <>
+              <br />- координаты [автоматически заполняются из карты],
+            </>
+          )}
+          {selectedIssueTypeId === null && (
+            <>
+              <br />- тип проблемы,
+            </>
+          )}
+          {!shortDescription && (
+            <>
+              <br />- краткое описание,
+            </>
+          )}
+          {!address && (
+            <>
+              <br />- адрес
+            </>
+          )}
+        </div>,
+      );
 			return;
 		}
 		// Подготовка данных для отправки
-		const reportData = {
-			latitude: latitude,
-			longitude: longitude,
-			typeId: selectedIssueTypeId, // Отправляем ID типа проблемы
-			shortDescription: shortDescription,
-			detailedDescription: detailedDescription || undefined, // Отправляем undefined, если пустое
-			address: address,
-			// file: file, // Пока не отправляем файл
-		};
+		const reportData = new FormData()
+		reportData.append("latitude", latitude)
+		reportData.append("longitude", longitude)
+		reportData.append("typeId", selectedIssueTypeId.toString())
+		reportData.append("shortDescription", shortDescription)
+		reportData.append("address", address)
+		if(detailedDescription) {
+			reportData.append("detailedDescription", detailedDescription)
+		}
+		files.forEach(file => {
+			reportData.append("files", file)
+		})
 
 		try {
 			// Отправка данных на бэкенд с помощью fetcher
 			// Предполагается, что fetcher уже парсит JSON и обрабатывает базовые ошибки HTTP
-			const responseData = await fetcher("/reports", {
+			const responseData = await fetcher("/reports/", {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(reportData),
+
+				body: reportData,
 			});
 
 			// Проверяем, успешно ли создана заявка по наличию issueId в ответе
 			if (responseData && responseData.issueId) {
 				toast.success("Заявка успешно создана!");
 				toast.success("Вам начислен +1 балл :)");
+				localStorage.removeItem("photo");
 				// Перенаправляем пользователя на страницу со списком заявок
-				navigate("/dashboard/reports");
+				setTimeout(() => {
+					navigate(`../${FRONT_PATHS.REPORTS}?showMyOnly=true`);
+				}, 100)
 			} else {
 				// Если fetcher не выбросил ошибку, но issueId отсутствует,
 				// возможно, fetcher возвращает объект ошибки или null при неудаче,
@@ -192,31 +265,6 @@ export const DashboardCreateReport = () => {
 
 	return (
 		<>
-			<header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-				<SidebarTrigger className="-ml-1" />
-				<Separator orientation="vertical" className="mr-2 h-4" />
-				<Breadcrumb>
-					<BreadcrumbList>
-						<BreadcrumbItem className="hidden md:block">
-							<BreadcrumbLink onClick={() => setStr("Green Mapper")}>
-								{str}
-							</BreadcrumbLink>
-						</BreadcrumbItem>
-						<BreadcrumbSeparator className="hidden md:block" />
-						<BreadcrumbItem>
-							<BreadcrumbPage>Создать заявку</BreadcrumbPage>
-						</BreadcrumbItem>
-					</BreadcrumbList>
-				</Breadcrumb>
-				<Button
-					className="ml-auto"
-					onClick={() => {
-						authClient.signOut().then(() => navigate("/"));
-					}}
-				>
-					Выйти
-				</Button>
-			</header>
 			<div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
 				<Card className="w-full max-w-lg ">
 					<CardHeader>
@@ -339,16 +387,84 @@ export const DashboardCreateReport = () => {
 										required
 									/>
 								</div>
-								<div className="grid w-full max-w-sm items-center gap-2.5 min-w-0">
-									<Label htmlFor="picture">Фото</Label>
-									<Input
-										id="picture"
-										type="file"
-										onChange={(e) =>
-											setFile(e.target.files ? e.target.files[0] : null)
-										}
-									/>
+								<div className="grid w-full max-w-full items-center min-w-0">
+									<div className="flex justify-between">
+									<Label htmlFor="picture">
+										Загруженные фото: 
+									<span className="text-gray-500 text-xs  relative top-[1px]">{files.length}/{maxFilesCount}</span>
+									</Label>
+									{photoPreviews.length !== 0 && (
+										<Button
+										  variant="outline"
+										  className="text-xs"
+										  onClick={() => {
+										  	setFiles([]);
+										  	setPhotoPreviews([])
+										  }}
+										>
+											Убрать
+										</Button>
+									)}
+									</div>
+
 									{/* Пока не обрабатываем загрузку файла на бэкенде */}
+									{photoPreviews.length ? (
+										<div className="relative w-full">
+											{photoPreviews.map((photoPreview, index) => (
+													<img
+													key={photoPreview}
+													src={photoPreview}
+													alt={`Загруженное фото ${index+1}`}
+													className="w-full h-auto rounded-md border mt-4"
+													/>
+													)
+											)}
+											{isFromQuickReport && (
+												<p className="text-xs text-green-600 mt-1">
+												✓ Фото загружено с камеры
+											</p>
+											)}
+										</div>
+									) : (
+										<Input
+											id="picture"
+											type="file"
+											accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+											className="mt-4"
+											multiple
+											onChange={(e) => {
+												if(e.target.files) {
+													let loadedFiles = Array.from(e.target.files)
+													if(loadedFiles.length > maxFilesCount) {
+														loadedFiles = loadedFiles.splice(0, maxFilesCount)
+														toast.error(`Максимальное количество загружаемых файлов: ${maxFilesCount}`)
+													}
+													const invalidTypeFile = loadedFiles.find((file) => !allowedMimeTypes.has(file.type));
+													if (invalidTypeFile) {
+														toast.error(`Файл "${invalidTypeFile.name}" должен быть в формате jpg или png`);
+														return;
+													}
+													const oversizedFile = loadedFiles.find((file) => file.size > maxFileSizeBytes);
+													if (oversizedFile) {
+														toast.error(`Файл "${oversizedFile.name}" превышает 3 МБ`);
+														return;
+													}
+
+													const urls: string[] = []
+													setFiles(loadedFiles)
+													loadedFiles.forEach(file => {
+														urls.push(URL.createObjectURL(file))
+													})
+													setPhotoPreviews(urls)
+													setIsFromQuickReport(false);
+												} else {
+													setFiles([]);
+													setPhotoPreviews([])
+												}
+											}
+											}
+										/>
+									)}
 								</div>
 							</div>
 						</form>

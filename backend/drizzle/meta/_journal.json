@@ -22,6 +22,27 @@
       "when": 1747491621585,
       "tag": "0002_quiet_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773015679813,
+      "tag": "0003_lumpy_kingpin",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776389778902,
+      "tag": "0004_plain_hammerhead",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776902400000,
+      "tag": "0005_late_mettle",
+      "breakpoints": true
     }
   ]
 }

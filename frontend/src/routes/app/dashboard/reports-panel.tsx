@@ -97,7 +97,7 @@ export const DashboardReportsPanel = () => {
 
     const handleSetStatus = async (issueId: number, status: number) => {
         try {
-            const response = await fetcher(`reports/${issueId}/status`, {
+            const response = await fetcher(`/reports/${issueId}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ statusId: status }),

@@ -1,0 +1,18 @@
+services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    command: >
+      sh -c "ollama serve &
+      until ollama list >/dev/null 2>&1; do sleep 1; done;
+      ollama pull llava:7b;
+      wait"
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    gpus: all
+    restart: unless-stopped
+
+volumes:
+  ollama:

@@ -14,6 +14,110 @@ export const minioClient = new Minio.Client({
   accessKey: process.env.MINIO_ROOT_USER, 
   secretKey: process.env.MINIO_ROOT_PASSWORD
 });
+
+const signInSocialHandler = async (ctx: any) => {
+	try {
+		const readPayload = async () => {
+			const body = ctx.body as any;
+
+			if (body && typeof body === "object") {
+				return body;
+			}
+
+			const textBody = await ctx.request.clone().text();
+			if (!textBody) {
+				return {};
+			}
+
+			try {
+				return JSON.parse(textBody);
+			} catch {
+				const params = new URLSearchParams(textBody);
+				return Object.fromEntries(params.entries());
+			}
+		};
+
+		const requestUrl = new URL(ctx.request.url);
+		const queryProvider = requestUrl.searchParams.get("provider") || requestUrl.searchParams.get("providerId");
+		const queryCallbackURL =
+			requestUrl.searchParams.get("callbackURL") ||
+			requestUrl.searchParams.get("redirectUrl") ||
+			requestUrl.searchParams.get("redirect_uri");
+
+		const rawBody = await readPayload();
+		const provider =
+			queryProvider ||
+			ctx?.query?.provider ||
+			ctx?.query?.providerId ||
+			rawBody?.provider ||
+			rawBody?.providerId ||
+			rawBody?.data?.provider ||
+			rawBody?.data?.providerId;
+		const callbackURL =
+			queryCallbackURL ||
+			ctx?.query?.callbackURL ||
+			ctx?.query?.redirectUrl ||
+			ctx?.query?.redirect_uri ||
+			rawBody?.callbackURL ||
+			rawBody?.redirectUrl ||
+			rawBody?.redirect_uri ||
+			rawBody?.data?.callbackURL ||
+			rawBody?.data?.redirectUrl ||
+			rawBody?.data?.redirect_uri;
+		if (!provider) {
+			return new Response(JSON.stringify({ error: "Missing provider" }), { status: 400 });
+		}
+		if (provider !== "yandex") {
+			return new Response(JSON.stringify({ error: "Unsupported provider" }), {
+				status: 400,
+				headers: { "Content-Type": "application/json" },
+			});
+		}
+		const mapped = {
+			providerId: provider,
+			...(callbackURL ? { callbackURL } : {}),
+		};
+
+		const forwardHeaders: Record<string, string> = { "Content-Type": "application/json" };
+		if (ctx.headers?.origin) forwardHeaders.origin = String(ctx.headers.origin);
+		if (ctx.headers?.referer) forwardHeaders.referer = String(ctx.headers.referer);
+		if (ctx.headers?.cookie) forwardHeaders.cookie = String(ctx.headers.cookie);
+
+		const internalAuthBase = process.env.IN_CONTAINER ? "http://127.0.0.1:3000" : "http://localhost:3000";
+		const resp = await fetch(`${internalAuthBase}/auth/sign-in/oauth2`, {
+			method: "POST",
+			headers: forwardHeaders,
+			body: JSON.stringify(mapped),
+			redirect: "manual",
+		});
+
+		const contentType = resp.headers.get("content-type") || "";
+		if (contentType.includes("application/json")) {
+			const cloned = resp.clone();
+			const payload = await cloned.json().catch(() => null);
+			if (payload?.redirect && payload?.url) {
+				const headers = new Headers();
+				headers.set("Location", payload.url);
+				const setCookie = resp.headers.get("set-cookie");
+				if (setCookie) {
+					headers.set("set-cookie", setCookie);
+				}
+				return new Response(null, {
+					status: 302,
+					headers,
+				});
+			}
+		}
+
+		return new Response(resp.body, {
+			status: resp.status,
+			headers: resp.headers,
+		});
+	} catch (err: any) {
+		return new Response(JSON.stringify({ error: err?.message || String(err) }), { status: 500, headers: { "Content-Type": "application/json" } });
+	}
+};
+
 const app = new Elysia()
 	.use(
 		cors({
@@ -23,44 +127,15 @@ const app = new Elysia()
 			allowedHeaders: ["Content-Type", "Authorization"],
 		}),
 	)
-	.post("/auth/sign-in/social", async (ctx) => {
-			try {
-				const rawBody = ctx.body;
-				const provider = (rawBody && (rawBody.provider || rawBody.providerId)) || undefined;
-				const callbackURL = rawBody?.callbackURL || rawBody?.redirectUrl || rawBody?.redirect_uri;
-				if (!provider) {
-					return new Response(JSON.stringify({ error: "Missing provider" }), { status: 400 });
-				}
-				const mapped = { providerId: provider } as any;
-				if (callbackURL) mapped.callbackURL = callbackURL;
-
-				const forwardHeaders: Record<string, string> = { "Content-Type": "application/json" };
-				if (ctx.headers?.origin) forwardHeaders["origin"] = String(ctx.headers.origin);
-				if (ctx.headers?.referer) forwardHeaders["referer"] = String(ctx.headers.referer);
-				if (ctx.headers?.cookie) forwardHeaders["cookie"] = String(ctx.headers.cookie);
-
-				const authBase = process.env.BETTER_AUTH_URL || "http://localhost:3000";
-				const resp = await fetch(`${authBase}/auth/sign-in/oauth2`, {
-					method: "POST",
-					headers: forwardHeaders,
-					body: JSON.stringify(mapped),
-				});
-
-				const text = await resp.text();
-				const contentType = resp.headers.get("content-type") || "";
-				if (contentType.includes("application/json")) {
-					return new Response(text, { status: resp.status, headers: { "Content-Type": "application/json" } });
-				}
-				return new Response(text, { status: resp.status });
-			} catch (err: any) {
-				return new Response(JSON.stringify({ error: err?.message || String(err) }), { status: 500, headers: { "Content-Type": "application/json" } });
-			}
-	})
 	.get("/health", async () => {
 		return {status: "ok"}
 	})
+	.get("/social-sign-in", signInSocialHandler)
+	.post("/social-sign-in", signInSocialHandler)
 	.use(swaggerMiddleware)
 	.mount(auth.handler)
+	.post("/auth/sign-in/social", signInSocialHandler)
+	.post("/api/auth/sign-in/social", signInSocialHandler)
 	.use(usersRouter)
 	.use(reportsRouter)
 	.listen({

@@ -12,5 +12,6 @@ WORKDIR /app
 COPY --from=build /app/package.json /app/
 COPY --from=build /app/dist/ /app/dist
 COPY --from=build /app/drizzle/ /app/drizzle
+COPY --from=build /app/base_issue_types.txt /app/base_issue_types.txt
 ENTRYPOINT ["bun", "start"]
 

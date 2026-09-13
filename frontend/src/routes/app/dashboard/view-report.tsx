@@ -32,7 +32,20 @@ interface Report {
 
 // Компонент для отображения изображений в виде галереи
 const ImageGallery = ({ images }: { images: string[] }) => {
-	const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
+	const [selectedIndex, setSelectedIndex] = React.useState<number | null>(null);
+	const selectedImage = selectedIndex !== null ? images[selectedIndex] : null;
+
+	const showPrevious = (event: React.MouseEvent) => {
+		event.stopPropagation();
+		if (selectedIndex === null) return;
+		setSelectedIndex((selectedIndex - 1 + images.length) % images.length);
+	};
+
+	const showNext = (event: React.MouseEvent) => {
+		event.stopPropagation();
+		if (selectedIndex === null) return;
+		setSelectedIndex((selectedIndex + 1) % images.length);
+	};
 
 	if (!images || images.length === 0) {
 		return (
@@ -50,7 +63,7 @@ const ImageGallery = ({ images }: { images: string[] }) => {
 					<div
 						key={index}
 						className="relative aspect-square cursor-pointer overflow-hidden rounded-lg border bg-muted/10 hover:opacity-90 transition-opacity"
-						onClick={() => setSelectedImage(image)}
+						onClick={() => setSelectedIndex(index)}
 					>
 						<img
 							src={image}
@@ -65,19 +78,42 @@ const ImageGallery = ({ images }: { images: string[] }) => {
 			{selectedImage && (
 				<div
 					className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-					onClick={() => setSelectedImage(null)}
+					onClick={() => setSelectedIndex(null)}
 				>
-					<div className="relative max-w-[90vw] max-h-[90vh]">
+					<div
+						className="relative flex max-w-[95vw] max-h-[90vh] items-center justify-center p-4"
+						onClick={(event) => event.stopPropagation()}
+					>
+						{images.length > 1 && (
+							<Button
+								variant="outline"
+								size="icon"
+								className="absolute left-2 top-1/2 z-10 -translate-y-1/2 bg-black/50 text-white hover:bg-black/70"
+								onClick={showPrevious}
+							>
+								{"<"}
+							</Button>
+						)}
 						<img
 							src={selectedImage}
 							alt="Просмотр"
-							className="object-contain w-full h-full"
+							className="max-h-[80vh] max-w-[85vw] object-contain rounded-md"
 						/>
+						{images.length > 1 && (
+							<Button
+								variant="outline"
+								size="icon"
+								className="absolute right-2 top-1/2 z-10 -translate-y-1/2 bg-black/50 text-white hover:bg-black/70"
+								onClick={showNext}
+							>
+								{">"}
+							</Button>
+						)}
 						<Button
 							variant="outline"
 							size="icon"
 							className="absolute top-4 right-4 bg-black/50 text-white hover:bg-black/70"
-							onClick={() => setSelectedImage(null)}
+							onClick={() => setSelectedIndex(null)}
 						>
 							✕
 						</Button>

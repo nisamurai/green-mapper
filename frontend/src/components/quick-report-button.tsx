@@ -7,6 +7,8 @@ import { FRONT_PATHS } from "@/types/paths";
 export function QuickReportButton(
     props: React.ButtonHTMLAttributes<HTMLButtonElement>,
 ) {
+    const MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024;
+    const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
     const navigate = useNavigate();
     const { data: session } = authClient.useSession();
     const [isCameraOpen, setIsCameraOpen] = React.useState(false);
@@ -148,6 +150,14 @@ export function QuickReportButton(
         if (!file) {
             return;
         }
+        if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+            setErrorMessage("Можно загрузить только jpg или png.");
+            return;
+        }
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setErrorMessage("Размер изображения не должен превышать 3 МБ.");
+            return;
+        }
         navigateToCreateReportWithPhoto(file);
     };
 
@@ -221,7 +231,7 @@ export function QuickReportButton(
             <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,.jpg,.jpeg,.png"
                 capture="environment"
                 className="hidden"
                 onChange={handleFileSelect}

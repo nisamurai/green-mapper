@@ -53,7 +53,9 @@ interface CreateReportState {
 	longitude?: string | number;
 }
 
-const maxFilesCount = 3
+const maxFilesCount = 3;
+const maxFileSizeBytes = 3 * 1024 * 1024;
+const allowedMimeTypes = new Set(["image/jpeg", "image/png"]);
 
 
 export const DashboardCreateReport = () => {
@@ -427,7 +429,7 @@ export const DashboardCreateReport = () => {
 										<Input
 											id="picture"
 											type="file"
-											accept="image/*"
+											accept="image/jpeg,image/png,.jpg,.jpeg,.png"
 											className="mt-4"
 											multiple
 											onChange={(e) => {
@@ -437,6 +439,17 @@ export const DashboardCreateReport = () => {
 														loadedFiles = loadedFiles.splice(0, maxFilesCount)
 														toast.error(`Максимальное количество загружаемых файлов: ${maxFilesCount}`)
 													}
+													const invalidTypeFile = loadedFiles.find((file) => !allowedMimeTypes.has(file.type));
+													if (invalidTypeFile) {
+														toast.error(`Файл "${invalidTypeFile.name}" должен быть в формате jpg или png`);
+														return;
+													}
+													const oversizedFile = loadedFiles.find((file) => file.size > maxFileSizeBytes);
+													if (oversizedFile) {
+														toast.error(`Файл "${oversizedFile.name}" превышает 3 МБ`);
+														return;
+													}
+
 													const urls: string[] = []
 													setFiles(loadedFiles)
 													loadedFiles.forEach(file => {

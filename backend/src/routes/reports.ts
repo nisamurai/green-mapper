@@ -16,6 +16,10 @@ const createReportBody = t.Object({
 	files: t.Optional(t.Files()), 
 });
 
+const MAX_FILES_COUNT = 3;
+const MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024;
+const ALLOWED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png"]);
+
 export const reportsRouter = new Elysia({ prefix: "/reports" })
   .use(authMiddleware)
   .get(
@@ -223,14 +227,14 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 		}
 
     if (files) {
-      if (files.length > 3) {
+      if (files.length > MAX_FILES_COUNT) {
         set.status = 422;
         return { error: "To much files" };
       }
       let name = "";
       if (
         files.some((file) => {
-          if (file.type.startsWith("image/")) {
+          if (ALLOWED_IMAGE_MIME_TYPES.has(file.type)) {
             return false;
           } else {
             name = file.name;
@@ -239,7 +243,19 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         })
       ) {
         set.status = 422;
-        return { error: `file '${name}' is not an image` };
+        return { error: `file '${name}' should be jpg or png` };
+      }
+      if (
+        files.some((file) => {
+          if (file.size <= MAX_FILE_SIZE_BYTES) {
+            return false;
+          }
+          name = file.name;
+          return true;
+        })
+      ) {
+        set.status = 422;
+        return { error: `file '${name}' exceeds 3 MB` };
       }
     } 
 

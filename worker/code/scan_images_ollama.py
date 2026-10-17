@@ -36,7 +36,8 @@ async def moderate_image(issue: dict, files: list[bytes]) -> dict:
             f"files len:\n{len(files)}\n"
             f"issue shorten:\n{json.dumps(shortenIsuse, indent=2)}"
             )
-        return {"verified": True, "message": "testing, no llm asked"}
+        # return {"verified": True, "message": "testing, no llm asked"}
+        return {"verified": False, "message": "testing, no llm asked"}
     
     images_b64  =  [base64.b64encode(file).decode("utf-8") for file in files ] 
     request_json = json.dumps(issue, ensure_ascii=False)

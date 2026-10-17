@@ -19,6 +19,7 @@ import { useNavigate, useLocation } from "react-router";
 import { fetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 import { FRONT_PATHS } from "@/types/paths";
+import { getRoleLabel } from "@/lib/utils";
 
 export type UserProfile = {
 	id: number;
@@ -100,7 +101,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 					</span>
 				</div>
 				<span className="font-medium text-base truncate">
-					Статус: {user?.role || "Загрузка..."}
+					Статус: {user?.role ? getRoleLabel(user.role) : "Загрузка..."}
 				</span>
 				<span className="font-medium text-base truncate">
 					Рейтинг: {!isNaN(user?.points!) ? user?.points : "Загрузка..."}
@@ -123,6 +124,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 							case "user": return !!accessedByUser
 							case "admin": return !!accessedByAdmin
 							case "operator": return !!accessedByOperator
+							case "superAdmin": return true
 							default: return false
 						}
 					})

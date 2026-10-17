@@ -20,6 +20,7 @@ export const usersRouter = new Elysia({ prefix: "/users" })
                 points: true,
                 role: true,
                 twoFactorEnabled: true,
+                hasAccessToMatureContent: true
             },
         });
         return fullUser;

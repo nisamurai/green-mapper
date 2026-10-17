@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { getRoleLabel } from "@/lib/utils";
 
 export type UserProfile = {
 	id: number;
@@ -15,6 +16,7 @@ export type UserProfile = {
 	points: number;
 	role: string;
 	twoFactorEnabled?: boolean;
+	hasAccessToMatureContent: boolean;
 };
 
 export const DashboardProfile = () => {
@@ -64,7 +66,7 @@ export const DashboardProfile = () => {
 					</span>
 				</div>
 				<span className="font-medium text-base truncate">
-					Статус: {user?.role || "Загрузка..."}
+					Статус: {user?.role ? getRoleLabel(user.role) : "Загрузка..."}
 				</span>
 				<span className="font-medium text-base truncate">
 					Рейтинг: {!isNaN(user?.points!) ? user?.points : "Загрузка..."}

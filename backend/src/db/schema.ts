@@ -16,6 +16,8 @@ import {
 
 const authSchema = pgSchema("auth");
 
+type UserRoles = "user" | "admin" | "operator" | "superAdmin"
+
 
 export const user = authSchema.table("user", {
 	id: text("id").primaryKey(),
@@ -27,10 +29,11 @@ export const user = authSchema.table("user", {
 	createdAt: timestamp("created_at").notNull(),
 	updatedAt: timestamp("updated_at").notNull(),
 	points: integer("points").notNull().default(0),
-	role: varchar("role", { length: 10 }).$type<"user" | "admin" | "operator">().default("user"),
-}, (table) => ({
-	pointsNonNegative: check("user_points_non_negative", sql`${table.points} >= 0`),
-}));
+	role: varchar("role", { length: 255 }).$type<UserRoles>().default("user"),
+  hasAccessToMatureContent: boolean("mature_content_access").notNull().default(false)
+}, (table) => [
+	check("user_points_non_negative", sql`${table.points} >= 0`),
+]);
 
 export const session = authSchema.table("session", {
 	id: text("id").primaryKey(),
@@ -109,12 +112,13 @@ export const issues = pgTable("issues", {
   longitude: decimal("longitude", { precision: 11, scale: 8 }),
   createdAt: timestamp("created_at").defaultNow(),
   expectedResolutionDate: date("expected_resolution_date"),
-}, (table) => ({
-  latitude_index: index("latitude_index").on(table.latitude),
-  longitude_index: index("longitude_index").on(table.longitude),
-  status_index: index("status_index").on(table.statusId),
-  user_index: index("user_index").on(table.userId),
-}));
+  matureContent: boolean("mature_content").notNull().default(false)
+}, (table) => [
+  index("latitude_index").on(table.latitude),
+  index("longitude_index").on(table.longitude),
+  index("status_index").on(table.statusId),
+  index("user_index").on(table.userId),
+]);
 
 // Фотографии
 export const photos = pgTable("photos", {

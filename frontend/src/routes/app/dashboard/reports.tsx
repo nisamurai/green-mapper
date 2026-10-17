@@ -44,7 +44,7 @@ export const DashboardReports = () => {
         getKey,
         fetcher,
         { 
-            revalidateFirstPage: false,
+            // revalidateFirstPage: false,
             persistSize: true 
         }
     );

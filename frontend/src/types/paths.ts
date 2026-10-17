@@ -8,6 +8,7 @@ export const FRONT_PATHS = {
     PROFILE: "profile",
     REPORTS: "reports",
     CREATE_REPORT: "create-report",
-    REPORTS_PANEL: "reports-panel"
+    REPORTS_PANEL: "reports-panel",
+    ACCESS_MANAGMENT: "access-managment"
     
 }

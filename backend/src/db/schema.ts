@@ -16,7 +16,7 @@ import {
 
 const authSchema = pgSchema("auth");
 
-type UserRoles = "user" | "admin" | "operator" | "superAdmin"
+export type UserRoles = "user" | "admin" | "operator" | "superAdmin"
 
 
 export const user = authSchema.table("user", {

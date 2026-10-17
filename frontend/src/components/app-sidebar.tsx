@@ -80,6 +80,16 @@ export const PagesData = {
 				},
 			],
 		},
+		{
+			title: "Вкладки для супер админа",
+			url: "#",
+			items: [
+				{
+					title: "Панель управления доступом",
+					url: `/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.ACCESS_MANAGMENT}`,
+				},
+			],
+		},
 	],
 };
 

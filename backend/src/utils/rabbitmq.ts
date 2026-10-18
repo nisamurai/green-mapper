@@ -1,11 +1,15 @@
-import amqp, { ChannelModel, Channel } from "amqplib";
+import amqp, { ChannelModel, ConfirmChannel } from "amqplib";
+import crypto from "crypto";
 
 class RabbitMQService {
   private connection: ChannelModel | null = null;
-  private channel: Channel | null = null;
+  private channel: ConfirmChannel | null = null;
   private isConnecting: boolean = false;
-  private reconnectTimer: NodeJS.Timeout | null= null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
   private readonly url: string;
+
+  private readonly maxPublishRetries = 5;
+  private readonly baseRetryDelayMs = 200;
 
   constructor() {
     this.url =
@@ -21,10 +25,10 @@ class RabbitMQService {
 
     try {
       this.connection = await amqp.connect(this.url);
-      this.channel = await this.connection.createChannel();
+
+      this.channel = await this.connection.createConfirmChannel();
 
       this.connection.on("error", (error) => {
-
         console.error("RabbitMQ connection error:", error);
         if (this.reconnectTimer) {
           clearTimeout(this.reconnectTimer);
@@ -40,21 +44,19 @@ class RabbitMQService {
         }, 5000);
       });
 
+      await this.setupExchangeAndQueue();
 
-      await this.setupExchangeAndQueue()
-
-      console.log("Connected to RabbitMQ ");
+      console.log("Connected to RabbitMQ");
     } catch (error) {
       console.error("Failed to connect to RabbitMQ:", error);
-      throw error
+      throw error;
     } finally {
       this.isConnecting = false;
     }
   }
 
   private async setupExchangeAndQueue() {
-
-    if(!this.channel) throw new Error("channel unaccessable")
+    if (!this.channel) throw new Error("channel unaccessable");
 
     // Declare main exchange
     await this.channel.assertExchange("issues.exchange", "topic", {
@@ -95,7 +97,8 @@ class RabbitMQService {
       "issues.dlx",
       "issue.created.dead",
     );
-    
+
+    // Retry queue (consumer-side retry mechanism)
     await this.channel.assertQueue("issue.created.retry", {
       durable: true,
       arguments: {
@@ -109,28 +112,74 @@ class RabbitMQService {
   }
 
   async notifyIssueCreated<T extends { issueId: number; createdAt: Date }>(
-    issueData: T
+    issueData: T,
   ): Promise<void> {
     if (!this.channel) {
-      console.error("RabbitMQ channel not available");
-      return;
+      throw new Error("RabbitMQ channel not available");
     }
 
     const message = {
       issueId: issueData.issueId,
       timestamp: issueData.createdAt,
+      messageId: crypto.randomUUID(),
     };
 
-    this.channel.publish(
-      "issues.exchange",
-      "issue.created",
-      Buffer.from(JSON.stringify(message)),
-      {
-        persistent: true,
-      },
-    );
+    await this.publishWithRetry(message);
+  }
 
-    console.log(`Issue ${issueData.issueId} notification sent`);
+  private async publishWithRetry(
+    message: { issueId: number; timestamp: Date; messageId: string },
+    attempt: number = 0,
+  ): Promise<void> {
+    if (!this.channel) {
+      throw new Error("RabbitMQ channel not available");
+    }
+
+    const payload = Buffer.from(JSON.stringify(message));
+
+    try {
+      const ok = this.channel.publish(
+        "issues.exchange",
+        "issue.created",
+        payload,
+        {
+          persistent: true,
+          messageId: message.messageId,
+        },
+      );
+
+      if (!ok) {
+        await new Promise<void>((resolve) =>
+          this.channel!.once("drain", resolve),
+        );
+      }
+
+      await this.channel.waitForConfirms();
+
+      console.log(
+        `Issue ${message.issueId} notification published and confirmed ` +
+          `(messageId: ${message.messageId})`,
+      );
+    } catch (err) {
+      if (attempt >= this.maxPublishRetries) {
+        console.error(
+          `Publish failed after ${this.maxPublishRetries} retries. ` +
+            `MessageId: ${message.messageId}`,
+          err,
+        );
+        throw err;
+      }
+
+      const delay = this.baseRetryDelayMs * 2 ** attempt;
+      console.warn(
+        `Publish attempt ${attempt + 1} failed. Retrying in ${delay}ms...`,
+        err,
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      await this.publishWithRetry(message, attempt + 1);
+    }
   }
 
   async close(): Promise<void> {

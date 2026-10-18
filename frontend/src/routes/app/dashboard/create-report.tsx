@@ -29,10 +29,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { Button } from "@/components/ui/button";
-import { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation, data } from "react-router";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router";
 
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { fetcher } from "@/lib/fetcher";
 // import type { Report } from "@/types/report"; // Этот тип здесь не нужен
 
@@ -232,6 +232,9 @@ export const DashboardCreateReport = () => {
 				toast.success("Вам начислен +1 балл :)");
 				localStorage.removeItem("photo");
 				// Перенаправляем пользователя на страницу со списком заявок
+				 await mutate(
+						(key) => typeof key === "string" && key.startsWith("/reports/"),
+					);
 				setTimeout(() => {
 					navigate(`../${FRONT_PATHS.REPORTS}?showMyOnly=true`);
 				}, 100)

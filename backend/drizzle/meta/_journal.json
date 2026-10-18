@@ -43,6 +43,13 @@
       "when": 1776902400000,
       "tag": "0005_late_mettle",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792258569804,
+      "tag": "0006_conscious_prima",
+      "breakpoints": true
     }
   ]
 }

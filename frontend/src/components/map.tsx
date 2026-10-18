@@ -29,6 +29,7 @@ interface Report {
 	shortDescription?: string;
 	userName: string | null;
 	userPoints: number | null;
+	matureContent: string | null;
 	typeName: string | null; // Добавляем поле для типа заявки
 }
 const extentRussia = [
@@ -74,6 +75,8 @@ function DarkMapSPB() {
 			}),
 		}),
 	}));
+
+	console.log(popupInfo)
 
 	const tempMarkerSourceRef = useRef(new VectorSource());
 	const tempMarkerLayerRef = useRef(new VectorLayer({
@@ -507,6 +510,7 @@ useEffect(() => {
 						<EyeIcon />
 					</div>
 				)}
+				
 				{/* Проверяем, есть ли информация в popupInfo перед отображением содержимого */}
 				{popupInfo && (
 					<div>
@@ -521,6 +525,7 @@ useEffect(() => {
 								<p style={{ wordBreak: 'break-word' }}>Описание: {popupInfo.issue.shortDescription || 'Нет описания'}</p>
 								<p>Создатель: {popupInfo.issue.userName || 'Неизвестно'}</p>
 								<p>Рейтинг создателя: {popupInfo.issue.userPoints !== null ? popupInfo.issue.userPoints : 'Нет данных'}</p>
+								{popupInfo.issue.matureContent && <p className="text-destructive">Опасное содержание!</p>}
 								{/* Опционально: кнопка для перехода к полной информации о заявке */}
 								{/* <button onClick={() => navigate(`/${FRONT_PATHS.APP}/${FRONT_PATHS.DASHBOARD}/${FRONT_PATHS.REPORTS}/${popupInfo.issue.issueId}`)}>Подробнее</button> */}
 							</>

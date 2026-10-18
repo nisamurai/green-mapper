@@ -21,11 +21,12 @@ retry_options = RandomRetry(attempts=5)
 
 # Initialize the client
 client = Minio(
-    f"{"minio" if os.getenv("IN_CONTAINER") else "localhost"}:9000",
+    f"{'minio' if os.getenv('IN_CONTAINER') else 'localhost'}:9000",
     access_key=os.getenv("MINIO_ROOT_USER"),
     secret_key=os.getenv("MINIO_ROOT_PASSWORD"),
-    secure=False
+    secure=False,
 )
+
 
 async def handle_issue_created(data: dict, message: aio_pika.IncomingMessage):
     issue_id = data.get("issueId")
@@ -50,8 +51,7 @@ async def handle_issue_created(data: dict, message: aio_pika.IncomingMessage):
         # TODO: получить фотки из minio
         files = [
             client.get_object(
-                bucket_name=bucket,
-                object_name=link.replace(f"{bucket}/", "")
+                bucket_name=bucket, object_name=link.replace(f"{bucket}/", "")
             ).read()
             for link in issue["links"]
         ]
@@ -64,30 +64,27 @@ async def handle_issue_created(data: dict, message: aio_pika.IncomingMessage):
     try:
         async with ClientSession(timeout=timeout) as session:
             retry_client = RetryClient(session)
-            if llm_answer["verified"]:
-                logger.info(f"issue was accepted, message: {llm_answer['message']}")
-                async with retry_client.put(
-                    f"http://{back_host}:3000/reports/{issue_id}/status",
-                    headers={"x-service-key": secret},
-                    json={"statusId": 1},
-                    retry_options=retry_options,
-                ) as response:
-                    response.raise_for_status()
-                    logger.info(f"issue {issue_id} verified")
+            if not llm_answer["verified"]:
+                logger.warning(
+                    f"issue was not accepted, message: {llm_answer['message']}"
+                )
             else:
-                logger.warning(f"issue was not accepted, message: {llm_answer['message']}")
+                logger.info(f"issue was accepted, message: {llm_answer['message']}")
 
-                async with retry_client.delete(
-                    f"http://{back_host}:3000/reports/{issue_id}",
-                    headers={"x-service-key": secret},
-                    retry_options=retry_options,
-                ) as response:
-                    response.raise_for_status()
-                    logger.info(f"issue {issue_id} not verified, reason: {llm_answer["message"]}")
+            async with retry_client.put(
+                f"http://{back_host}:3000/reports/{issue_id}/llm_answer",
+                headers={"x-service-key": secret},
+                json={"matureContent": not llm_answer["verified"]},
+                retry_options=retry_options,
+            ) as response:
+                response.raise_for_status()
+                logger.info(f"issue {issue_id} moved to the next status")
+
     except Exception as e:
-        logger.error(f"не удалось сообщить беку о результате проверки: {e}", exc_info=True)
+        logger.error(
+            f"не удалось сообщить беку о результате проверки: {e}", exc_info=True
+        )
         raise e
 
     logger.info(f"Issue {issue_id} processed successfully")
     return
-

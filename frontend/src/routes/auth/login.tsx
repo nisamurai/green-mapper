@@ -76,7 +76,7 @@ export const Login = () => {
 		setIsPending(false);
 
 		if (error) {
-			if (error?.code === "INVALID_EMAIL_OR_PASSWORD") toast("wrong creds");
+			if (error?.code === "INVALID_EMAIL_OR_PASSWORD") toast("Неправильный логин или пароль!");
 			else toast("Ошибка");
 		}
 	};

@@ -13,7 +13,8 @@ import {
 	Login, 
 	TwoFactor,
 	SignUp, 
-	Home 
+	Home, 
+    AccessMangment
 } from "./routes";
 
 function App() {
@@ -37,6 +38,7 @@ function App() {
 						<Route path={FRONT_PATHS.REPORTS} element={<DashboardReports />} />
 						<Route path={FRONT_PATHS.CREATE_REPORT} element={<DashboardCreateReport />} />
 						<Route path={FRONT_PATHS.REPORTS_PANEL} element={<DashboardReportsPanel />} />
+						<Route path={FRONT_PATHS.ACCESS_MANAGMENT} element={<AccessMangment />} />
 					</Route>
 				</Route>
 				<Route path="*" element={<Navigate to="/" replace />}/>

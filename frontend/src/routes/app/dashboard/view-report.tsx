@@ -283,7 +283,7 @@ export const DashboardViewReport = () => {
   const onMatureChange = (mature: boolean) => {
     toast.promise(
       async () => {
-        const response = await fetcher(`/reports/${issueId}/matureContnent`, {
+        const response = await fetcher(`/reports/${issueId}/matureContent`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ matureContent: mature }),

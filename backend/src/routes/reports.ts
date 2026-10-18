@@ -464,6 +464,19 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         let deletedIssueId: number | null = null;
 
         await db.transaction(async (tx) => {
+          const existingIssue = await tx.query.issues.findFirst({
+            where: eq(schema.issues.issueId, id),
+            columns: {
+              issueId: true,
+              userId: true,
+              statusId: true,
+            },
+          });
+
+          if (!existingIssue) {
+            throw new Error(`Issue with ID ${id} not found.`);
+          }
+
           const pictures = await tx
             .delete(schema.photos)
             .where(eq(schema.photos.issueId, id))
@@ -483,7 +496,10 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
             throw new Error(`Issue with ID ${id} not found.`);
           }
 
-          if (serviceRequest) {
+          // 3 — «Выполнена», 4 — «Отклонена». Служебное удаление списывает балл в любом статусе.
+          const completedOrRejected =
+            existingIssue.statusId === 3 || existingIssue.statusId === 4;
+          if (serviceRequest || completedOrRejected) {
             await tx
               .update(schema.user)
               .set({ points: sql`GREATEST(${schema.user.points} - 1, 0)` })
@@ -673,7 +689,7 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
     },
   )
   .put(
-    "/:id/matureContnent",
+    "/:id/matureContent",
     async ({ params: { id }, body, user, set, serviceRequest }) => {
       // Проверяем, авторизован ли пользователь и является ли он админом
       if (

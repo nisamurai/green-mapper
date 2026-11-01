@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-import time
 
 import aio_pika
 from pamqp import commands as spec
@@ -34,11 +33,19 @@ class RabbitMQClient:
     
     async def consume_issues(self, callback):
         """Consume messages from issue.created queue"""
-        if not self.channel:
-            raise Exception("Channel not available")
-        
-        # Just get the queue reference, don't create it
-        queue = await self.channel.get_queue("issue.created.queue")
+        # Backend declares the queue. Wait until it exists; a missing queue closes the channel.
+        queue = None
+        while queue is None:
+            try:
+                if not self.connection:
+                    raise Exception("Connection not available")
+                if not self.channel or self.channel.is_closed:
+                    self.channel = await self.connection.channel()
+                queue = await self.channel.get_queue("issue.created.queue")
+            except Exception as e:
+                logger.warning("issue.created.queue is not ready yet: %s", e)
+                self.channel = None
+                await asyncio.sleep(5)
         
         self.is_consuming = True
         
@@ -88,7 +95,7 @@ class RabbitMQClient:
 
 async def main():
     logger.info("waiting for brocker startup")
-    time.sleep(float(os.getenv("RABBITMQ_DELAY_SECONDS", "0")))
+    await asyncio.sleep(float(os.getenv("RABBITMQ_DELAY_SECONDS", "0")))
     logger.info("attempt to connect")
     client = RabbitMQClient()
     

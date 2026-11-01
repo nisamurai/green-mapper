@@ -15,9 +15,10 @@ const pool = new Pool({
 });
 // console.log(`Connecting to PostgreSQL at ${postgresString}...`);
 const redisString = `redis://default:${process.env.REDIS_PASSWORD}@${process.env.IN_CONTAINER ? "redis" : 'localhost'}:6379`;
+const disableRedisCache = process.env.DISABLE_REDIS_CACHE === "true";
 // console.log(`Connecting to Redis at ${redisString}...`);
 export const db = drizzle(pool, {
   schema,
   logger: true, // Keep this on to see the cache in action
-  cache: new RedisDrizzleCache(redisString)
+  ...(disableRedisCache ? {} : { cache: new RedisDrizzleCache(redisString) }),
 });

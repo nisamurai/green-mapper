@@ -46,6 +46,10 @@ interface IssueType {
 	name: string;
 }
 
+const SHORT_DESCRIPTION_MAX = 200;
+const DETAILED_DESCRIPTION_MAX = 1000;
+const ADDRESS_MAX = 255;
+
 // Тип для данных, передаваемых через location.state
 interface CreateReportState {
 	photo?: File;
@@ -201,6 +205,26 @@ export const DashboardCreateReport = () => {
           )}
         </div>,
       );
+			return;
+		}
+		if (!shortDescription.trim()) {
+			toast.error("Краткое описание не может быть пустым");
+			return;
+		}
+		if (shortDescription.length > SHORT_DESCRIPTION_MAX) {
+			toast.error(`Краткое описание не длиннее ${SHORT_DESCRIPTION_MAX} символов`);
+			return;
+		}
+		if (detailedDescription.length > DETAILED_DESCRIPTION_MAX) {
+			toast.error(`Полное описание не длиннее ${DETAILED_DESCRIPTION_MAX} символов`);
+			return;
+		}
+		if (!address.trim()) {
+			toast.error("Адрес не может быть пустым");
+			return;
+		}
+		if (address.length > ADDRESS_MAX) {
+			toast.error(`Адрес не длиннее ${ADDRESS_MAX} символов`);
 			return;
 		}
 		// Подготовка данных для отправки
@@ -365,6 +389,7 @@ export const DashboardCreateReport = () => {
 										placeholder="Кратко опишите суть проблемы"
 										value={shortDescription}
 										onChange={(e) => setShortDescription(e.target.value)}
+										maxLength={SHORT_DESCRIPTION_MAX}
 										required
 									/>
 								</div>
@@ -376,6 +401,7 @@ export const DashboardCreateReport = () => {
 										placeholder="Подробно опишите проблему"
 										value={detailedDescription}
 										onChange={(e) => setDetailedDescription(e.target.value)}
+										maxLength={DETAILED_DESCRIPTION_MAX}
 										wrap="hard"
 									/>
 								</div>
@@ -387,6 +413,7 @@ export const DashboardCreateReport = () => {
 										placeholder="Впишите адрес ближайшего объекта"
 										value={address}
 										onChange={(e) => setAddress(e.target.value)}
+										maxLength={ADDRESS_MAX}
 										required
 									/>
 								</div>

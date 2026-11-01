@@ -1,4 +1,4 @@
-import { auth } from "@/utils/auth";
+import { handleAuthRequest } from "@/utils/auth";
 import { createBucketInNotExist } from "@/utils/minio";
 import { Elysia } from "elysia";
 import { swaggerMiddleware } from "./middleware/swagger";
@@ -133,7 +133,7 @@ const app = new Elysia()
 	.get("/social-sign-in", signInSocialHandler)
 	.post("/social-sign-in", signInSocialHandler)
 	.use(swaggerMiddleware)
-	.mount(auth.handler)
+	.mount(handleAuthRequest)
 	.post("/auth/sign-in/social", signInSocialHandler)
 	.post("/api/auth/sign-in/social", signInSocialHandler)
 	.use(usersRouter)
@@ -144,13 +144,21 @@ const app = new Elysia()
 	});
 
 console.log(`Started at ${app.server?.hostname}:${app.server?.port}`);
-setTimeout(async () => {
+
+async function initServices(attempt = 1) {
 	try {
 		await createBucketInNotExist()
 		await rabbitMQ.connect();
 	} catch (error) {
-		console.error("Failed to initialize services:", error);
-		app.server?.stop()
+		const delayMs = 5000;
+		console.error(`Failed to initialize services (attempt ${attempt}), retry in ${delayMs}ms:`, error);
+		setTimeout(() => {
+			void initServices(attempt + 1);
+		}, delayMs);
 	}
-}, Number(process.env.RABBITMQ_DELAY_SECONDS || "0")*1000)
+}
+
+setTimeout(() => {
+	void initServices();
+}, Number(process.env.RABBITMQ_DELAY_SECONDS || "0") * 1000)
 

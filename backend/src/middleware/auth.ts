@@ -1,4 +1,4 @@
-import { auth } from "@/utils/auth";
+import { auth, handleAuthRequest } from "@/utils/auth";
 import { db } from "@/db/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -17,7 +17,7 @@ function checkServicePass(headers: Headers) {
 }
 
 export const authMiddleware = new Elysia({ name: "better-auth" })
-	.mount(auth.handler)
+	.mount(handleAuthRequest)
 	.macro({
 		auth: {
 			async resolve({ status, request: { headers } }) {

@@ -39,6 +39,7 @@ const schema = z.object({
 export const TwoFactor = () => {
 	const [isPending, setIsPending] = useState(false);
 	const [isSending, setIsSending] = useState(false);
+	const [secondsLeft, setSecondsLeft] = useState(0);
 	const navigate = useNavigate();
 	const [searchParams] = useSearchParams();
 
@@ -56,15 +57,32 @@ export const TwoFactor = () => {
 		},
 	});
 
+	useEffect(() => {
+		if (secondsLeft <= 0) return;
+		const timer = setInterval(() => {
+			setSecondsLeft((current) => (current <= 1 ? 0 : current - 1));
+		}, 1000);
+		return () => clearInterval(timer);
+	}, [secondsLeft]);
+
 	const sendOtp = useCallback(async () => {
 		setIsSending(true);
 		const { error } = await authClient.twoFactor.sendOtp();
 		setIsSending(false);
 
 		if (error) {
+			const retryAfter = Number(
+				(error as { retryAfterSeconds?: number }).retryAfterSeconds,
+			);
+			if (error.status === 429) {
+				setSecondsLeft(
+					Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 60,
+				);
+			}
 			toast(error.message || "Не удалось отправить код");
 			return;
 		}
+		setSecondsLeft(60);
 		toast("Код отправлен на почту");
 	}, []);
 
@@ -125,11 +143,13 @@ export const TwoFactor = () => {
 								<Button
 									type="button"
 									variant="outline"
-									disabled={isSending || isPending}
+									disabled={isSending || isPending || secondsLeft > 0}
 									onClick={sendOtp}
 									className="w-full"
 								>
-									Отправить код ещё раз
+									{secondsLeft > 0
+										? `Отправить код ещё раз (${secondsLeft})`
+										: "Отправить код ещё раз"}
 								</Button>
 							</form>
 						</Form>

@@ -1,6 +1,7 @@
 import { format, subHours } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useState, useEffect, useRef } from "react";
+import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 import { fetcher } from "@/lib/fetcher";
 import type { Report } from "@/types/report";
@@ -14,15 +15,20 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { FRONT_PATHS } from "@/types/paths";
 import { useNavigate } from "react-router";
+import type { UserProfile } from "./profile";
 
 export const DashboardReports = () => {
     const [showMyOnly, setShowMyOnly] = useState(() => {
         return !!((new URLSearchParams(window.location.search)).get("showMyOnly"));
     });
+    const [matureOnly, setMatureOnly] = useState(false);
     const sentinelRef = useRef<HTMLDivElement>(null);
 	const navigate = useNavigate()
+    const { data: user } = useSWR<UserProfile>("/users/me", fetcher);
 
     const PAGE_SIZE = 20;
 
@@ -36,6 +42,7 @@ export const DashboardReports = () => {
             skip: (pageIndex * PAGE_SIZE).toString(),
             showMyOnly: showMyOnly.toString(),
         });
+        if (matureOnly) params.set("showMatureOnly", "true");
 
         return `/reports/?${params.toString()}`;
     };
@@ -93,6 +100,19 @@ export const DashboardReports = () => {
                 >
                     Мои заявки
                 </Button>
+                {user?.hasAccessToMatureContent && (
+                    <Label htmlFor="reportsShowMatureOnly" className="flex items-center gap-2">
+                        <Checkbox
+                            id="reportsShowMatureOnly"
+                            checked={matureOnly}
+                            onCheckedChange={(checked) => {
+                                setMatureOnly(checked === true);
+                                setSize(1);
+                            }}
+                        />
+                        Только опасные заявки
+                    </Label>
+                )}
             </div>
             
             <Table className="w-full min-w-[900px] md:table-fixed">

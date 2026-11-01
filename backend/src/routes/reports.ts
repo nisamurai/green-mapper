@@ -3,22 +3,27 @@ import { authMiddleware } from "@/middleware/auth";
 import Elysia, { t } from "elysia";
 import * as schema from "@/db/schema";
 import { and, gte, lte, sql, eq, or, ne, desc } from "drizzle-orm";
-import { putIntoBucketMultiple, removeFromBucketMultiple } from "@/utils/minio";
-import { rabbitMQ } from "@/utils/rabbitmq";
+import { issueService } from "@/issues/adapters";
+import {
+  ADDRESS_MAX,
+  DETAILED_DESCRIPTION_MAX,
+  SHORT_DESCRIPTION_MAX,
+  STATUS,
+  canViewIssue,
+  describeListVisibility,
+} from "@/issues/issue-rules";
 
 const createReportBody = t.Object({
   latitude: t.String(),
   longitude: t.String(),
   typeId: t.Numeric(),
-  shortDescription: t.String(),
-  detailedDescription: t.Optional(t.String()),
-  address: t.String(),
+  shortDescription: t.String({ minLength: 1, maxLength: SHORT_DESCRIPTION_MAX }),
+  detailedDescription: t.Optional(
+    t.String({ maxLength: DETAILED_DESCRIPTION_MAX }),
+  ),
+  address: t.String({ minLength: 1, maxLength: ADDRESS_MAX }),
   files: t.Optional(t.Files()),
 });
-
-const MAX_FILES_COUNT = 3;
-const MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024;
-const ALLOWED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png"]);
 
 export const reportsRouter = new Elysia({ prefix: "/reports" })
   .use(authMiddleware)
@@ -37,35 +42,40 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
       } = query;
 
       const filters = [];
+      const policy = describeListVisibility(user, {
+        showMyOnly: !!showMyOnly,
+        showMatureOnly: !!showMatureOnly,
+      });
 
-      // фильтр на 18+
-      const matureFilter = user?.hasAccessToMatureContent
-        ? // если есть доступ - учитываем фильтр или выводим все
-          showMatureOnly
-          ? eq(schema.issues.matureContent, true)
-          : undefined
-        : // если нет доступа - скрываем 18+
-          eq(schema.issues.matureContent, false);
-
-      // если смотрии свои заявки, то возращаем все
-      if (showMyOnly && user) {
-        filters.push(eq(schema.issues.userId, user.id));
-      } else {
-        // иначе - отфильтровываем те что на валидации нейронкой //TODO: нормальные статусы через enum
-        const baseFilter = and(ne(schema.issues.statusId, 5), matureFilter);
-        if (userId) {
-          // если смотрим чьи-то заявки - фильтр на их id
-          filters.push(and(baseFilter, eq(schema.issues.userId, userId)));
-        } else {
-          //если же смотрим все заявки
-          if (user && !showMatureOnly) {
-            //если мы залогинены - свои заявки любые
-            filters.push(or(eq(schema.issues.userId, user.id), baseFilter));
-          } else {
-            // если без входа - фильтр на проверку нейронкой + 18+
-            filters.push(baseFilter);
-          }
+      if (policy.restrictToUserId) {
+        const own = [eq(schema.issues.userId, policy.restrictToUserId)];
+        if (policy.onlyMature) {
+          own.push(eq(schema.issues.matureContent, true));
         }
+        filters.push(and(...own));
+      } else {
+        const others = [ne(schema.issues.statusId, STATUS.VALIDATION)];
+        if (policy.hideMatureFromOthers) {
+          others.push(eq(schema.issues.matureContent, false));
+        }
+        if (policy.onlyMature) {
+          others.push(eq(schema.issues.matureContent, true));
+        }
+        const othersFilter = and(...others);
+        const visibility = policy.includeOwnUserId
+          ? or(
+              and(
+                eq(schema.issues.userId, policy.includeOwnUserId),
+                ...(policy.onlyMature
+                  ? [eq(schema.issues.matureContent, true)]
+                  : []),
+              ),
+              othersFilter,
+            )
+          : othersFilter;
+        filters.push(
+          userId ? and(visibility, eq(schema.issues.userId, userId)) : visibility,
+        );
       }
 
       if (distance && distance > 0) {
@@ -258,21 +268,16 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
 
       if (!report || report.length === 0) return status("Not Found");
 
-      //!!! костыль, чтобы фильтровать не валидированные нейронкой !!!
       if (
-        !serviceRequest &&
-        report[0].statusId === 5 &&
-        report[0].userId !== user?.id
-      ) {
-        return status("Not Found");
-      }
-
-      // проверка на 18+
-      if (
-        !serviceRequest &&
-        report[0].matureContent &&
-        !user?.hasAccessToMatureContent &&
-        report[0].userId !== user?.id
+        !canViewIssue(
+          {
+            statusId: report[0].statusId,
+            userId: report[0].userId,
+            matureContent: report[0].matureContent,
+          },
+          user,
+          serviceRequest,
+        )
       ) {
         return status("Not Found");
       }
@@ -292,154 +297,28 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
   .post(
     "/",
     async ({ body, user, set }) => {
-      // Обработчик создания новой заявки
-      const {
-        latitude,
-        longitude,
-        typeId,
-        shortDescription,
-        detailedDescription,
-        address,
-        files,
-      } = body;
-
-      // Проверяем, авторизован ли пользователь
       if (!user) {
         set.status = 401;
         return { error: "Unauthorized" };
       }
 
-      if (files) {
-        if (files.length > MAX_FILES_COUNT) {
-          set.status = 422;
-          return { error: "To much files" };
-        }
-        let name = "";
-        if (
-          files.some((file) => {
-            if (ALLOWED_IMAGE_MIME_TYPES.has(file.type)) {
-              return false;
-            } else {
-              name = file.name;
-              return true;
-            }
-          })
-        ) {
-          set.status = 422;
-          return { error: `file '${name}' should be jpg or png` };
-        }
-        if (
-          files.some((file) => {
-            if (file.size <= MAX_FILE_SIZE_BYTES) {
-              return false;
-            }
-            name = file.name;
-            return true;
-          })
-        ) {
-          set.status = 422;
-          return { error: `file '${name}' exceeds 3 MB` };
-        }
-      }
-
-      // Начинаем транзакцию базы данных
-      try {
-        const result = await db.transaction(async (tx) => {
-          const defaultStatusId = 5; // ID статуса по умолчанию ('На валидации')
-
-          // Проверяем существование типа заявки
-          const issueType = await tx.query.issueTypes.findFirst({
-            where: eq(schema.issueTypes.typeId, typeId),
-          });
-
-          if (!issueType) {
-            set.status = 400;
-            tx.rollback();
-            return { error: `Issue type with ID ${typeId} not found.` };
-          }
-
-          // Вставляем новую заявку
-          const newIssue = await tx
-            .insert(schema.issues)
-            .values({
-              userId: user.id,
-              typeId: typeId,
-              statusId: defaultStatusId,
-              shortDescription: shortDescription,
-              detailedDescription: detailedDescription,
-              address: address,
-              latitude: latitude,
-              longitude: longitude,
-              createdAt: new Date(),
-              // expectedResolutionDate не устанавливаем при создании
-            })
-            .returning();
-
-          // Проверяем, успешно ли создана заявка
-          if (newIssue.length === 0) {
-            set.status = 500;
-            tx.rollback();
-            return { error: "Failed to create report." };
-          }
-
-          let paths: string[] = [];
-          if (files) {
-            paths = await putIntoBucketMultiple(files, newIssue[0].issueId);
-            const newPhotos = await tx
-              .insert(schema.photos)
-              .values(
-                paths.map((path) => ({
-                  issueId: newIssue[0].issueId,
-                  filePath: path,
-                  uploadedAt: new Date(),
-                })),
-              )
-              .returning();
-
-            // Проверяем, успешно ли добавлены фото
-            if (newPhotos.length !== paths.length) {
-              console.error("failed to add photos");
-              await removeFromBucketMultiple(
-                newPhotos.map((el) => el.filePath),
-              );
-              set.status = 500;
-              tx.rollback();
-              return { error: "Failed to create report." };
-            }
-          }
-
-          // Добавляем 1 балл к рейтингу пользователя
-          await tx
-            .update(schema.user)
-            .set({ points: sql`${schema.user.points} + 1` })
-            .where(eq(schema.user.id, user.id));
-
-          // посылаем запрос на валидацию в worker
-          try {
-            await rabbitMQ.notifyIssueCreated({
-              issueId: newIssue[0].issueId,
-              createdAt: newIssue[0].createdAt || new Date(),
-            });
-          } catch (queueError) {
-            console.error("Failed to send message to queue:", queueError);
-          }
-
-          // Если все успешно, возвращаем созданную заявку
-          return newIssue[0];
-        });
-
-        if ("issueId" in result) {
-          set.status = 201;
-          return result;
-        } else {
-          set.status = 500;
-          return result;
-        }
-      } catch (error) {
-        console.error("Error creating report and updating user points:", error);
-        set.status = 500;
-        return { error: "Internal server error." };
-      }
+      const result = await issueService.createReport({
+        userId: user.id,
+        latitude: body.latitude,
+        longitude: body.longitude,
+        typeId: body.typeId,
+        shortDescription: body.shortDescription,
+        detailedDescription: body.detailedDescription,
+        address: body.address,
+        files: body.files
+          ? Array.isArray(body.files)
+            ? body.files
+            : [body.files]
+          : undefined,
+      });
+      set.status = result.status;
+      if (!result.ok) return { error: result.error };
+      return result.data;
     },
     {
       body: createReportBody,
@@ -449,82 +328,17 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
   .delete(
     "/:id",
     async ({ params: { id }, user, set, serviceRequest }) => {
-      // Проверяем, авторизован ли пользователь и является ли он админом
-      if (
-        !serviceRequest &&
-        user?.role !== "admin" &&
-        user?.role !== "operator" &&
-        user?.role !== "superAdmin"
-      ) {
-        set.status = 403; // Forbidden
+      if (serviceRequest) {
+        set.status = 403;
         return { error: "Forbidden" };
       }
-
-      try {
-        let deletedIssueId: number | null = null;
-
-        await db.transaction(async (tx) => {
-          const existingIssue = await tx.query.issues.findFirst({
-            where: eq(schema.issues.issueId, id),
-            columns: {
-              issueId: true,
-              userId: true,
-              statusId: true,
-            },
-          });
-
-          if (!existingIssue) {
-            throw new Error(`Issue with ID ${id} not found.`);
-          }
-
-          const pictures = await tx
-            .delete(schema.photos)
-            .where(eq(schema.photos.issueId, id))
-            .returning({ link: schema.photos.filePath });
-
-          await removeFromBucketMultiple(pictures.map((p) => p.link));
-
-          const deletedIssues = await tx
-            .delete(schema.issues)
-            .where(eq(schema.issues.issueId, id))
-            .returning({
-              issueId: schema.issues.issueId,
-              userId: schema.issues.userId,
-            });
-
-          if (deletedIssues.length === 0) {
-            throw new Error(`Issue with ID ${id} not found.`);
-          }
-
-          // 3 — «Выполнена», 4 — «Отклонена». Служебное удаление списывает балл в любом статусе.
-          const completedOrRejected =
-            existingIssue.statusId === 3 || existingIssue.statusId === 4;
-          if (serviceRequest || completedOrRejected) {
-            await tx
-              .update(schema.user)
-              .set({ points: sql`GREATEST(${schema.user.points} - 1, 0)` })
-              .where(eq(schema.user.id, deletedIssues[0].userId));
-          }
-
-          deletedIssueId = deletedIssues[0].issueId;
-        });
-
-        set.status = 200;
-        return { success: true, issueId: deletedIssueId };
-      } catch (error) {
-        console.error(`Error deleting issue with ID ${id}:`, error);
-
-        if (
-          error instanceof Error &&
-          error.message.includes(`Issue with ID ${id} not found`)
-        ) {
-          set.status = 404;
-          return { error: `Issue with ID ${id} not found.` };
-        }
-
-        set.status = 500;
-        return { error: "Internal server error." };
-      }
+      const result = await issueService.deleteIssue({
+        id,
+        role: user?.role,
+      });
+      set.status = result.status;
+      if (!result.ok) return { error: result.error };
+      return { success: true, issueId: result.data.issueId };
     },
     {
       params: t.Object({ id: t.Number() }),
@@ -534,85 +348,18 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
   .put(
     "/:id/status",
     async ({ params: { id }, body, user, set, serviceRequest }) => {
-      // Проверяем, авторизован ли пользователь и является ли он админом
-      if (
-        !serviceRequest &&
-        user?.role !== "admin" &&
-        user?.role !== "operator" &&
-        user?.role !== "superAdmin"
-      ) {
-        set.status = 403; // Forbidden
+      if (serviceRequest) {
+        set.status = 403;
         return { error: "Forbidden" };
       }
-
-      const { statusId } = body;
-
-      if (!id) {
-        return {
-          error: "Invalid request body. 'statusId' (number) is required.",
-        };
-      }
-
-      // Опционально: Проверить, существует ли статус с таким ID в таблице issueStatuses
-      const statusExists = await db.query.issueStatuses.findFirst({
-        where: eq(schema.issueStatuses.statusId, statusId),
+      const result = await issueService.changeStatus({
+        id,
+        statusId: body.statusId,
+        role: user?.role,
       });
-      console.log("t", statusExists);
-      if (!statusExists) {
-        set.status = 400;
-        return { error: `Status with ID ${statusId} not found.` };
-      }
-
-      try {
-        const updatedIssue = await db.transaction(async (tx) => {
-          const existingIssue = await tx.query.issues.findFirst({
-            where: eq(schema.issues.issueId, id),
-            columns: {
-              issueId: true,
-              statusId: true,
-              userId: true,
-            },
-          });
-
-          if (!existingIssue) {
-            return null;
-          }
-          // Обновляем статус заявки по ID
-          const updatedIssues = await tx
-            .update(schema.issues)
-            .set({ statusId: statusId })
-            .where(eq(schema.issues.issueId, id))
-            .returning({
-              issueId: schema.issues.issueId,
-              statusId: schema.issues.statusId,
-            }); //Возвращаем ID заявки и статус
-
-          if (
-            !serviceRequest &&
-            statusId === 4 &&
-            existingIssue.statusId !== 4
-          ) {
-            await tx
-              .update(schema.user)
-              .set({ points: sql`GREATEST(${schema.user.points} - 1, 0)` })
-              .where(eq(schema.user.id, existingIssue.userId));
-          }
-
-          return updatedIssues[0];
-        });
-
-        if (!updatedIssue) {
-          set.status = 404; // Not Found
-          return { error: `Issue with ID ${id} not found.` };
-        }
-
-        set.status = 200; // OK
-        return { success: true, issue: updatedIssue };
-      } catch (error) {
-        console.error(`Error updating status for issue with ID ${id}:`, error);
-        set.status = 500;
-        return { error: "Internal server error." };
-      }
+      set.status = result.status;
+      if (!result.ok) return { error: result.error };
+      return { success: true, issue: result.data };
     },
     {
       params: t.Object({ id: t.Number() }),
@@ -769,46 +516,13 @@ export const reportsRouter = new Elysia({ prefix: "/reports" })
         };
       }
 
-      try {
-        const updatedIssue = await db.transaction(async (tx) => {
-          const existingIssue = await tx.query.issues.findFirst({
-            where: eq(schema.issues.issueId, id),
-            columns: {
-              issueId: true,
-              statusId: true,
-              userId: true,
-            },
-          });
-
-          if (!existingIssue) {
-            return null;
-          }
-          // Обновляем тег и статус заявки по ID
-          const updatedIssues = await tx
-            .update(schema.issues)
-            .set({ matureContent: body.matureContent, statusId: 1 })
-            .where(eq(schema.issues.issueId, id))
-            .returning();
-
-          return updatedIssues[0];
-        });
-
-        if (!updatedIssue) {
-          set.status = 404; // Not Found
-          return { error: `Issue with ID ${id} not found.` };
-        }
-
-        set.status = 200; // OK
-        return { success: true, issue: updatedIssue };
-      } catch (error) {
-        console.error(
-          `Error handling llm answer for issue with ID ${id}:`,
-          error,
-        );
-
-        set.status = 500;
-        return { error: "Internal server error." };
-      }
+      const result = await issueService.applyLlmAnswer({
+        id,
+        matureContent: body.matureContent,
+      });
+      set.status = result.status;
+      if (!result.ok) return { error: result.error };
+      return { success: true, issue: result.data };
     },
     {
       params: t.Object({ id: t.Number() }),

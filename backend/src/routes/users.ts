@@ -31,7 +31,16 @@ export const usersRouter = new Elysia({ prefix: "/users" })
   )
   .get(
     "/all",
-    async ({ query }) => {
+    async ({ query, user, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { error: "Unauthorized" };
+      }
+      if (user.role !== "superAdmin") {
+        set.status = 403;
+        return { error: "Forbidden" };
+      }
+
       const { limit, skip, searchParam } = query;
 
       const searchCondition = searchParam
@@ -58,8 +67,7 @@ export const usersRouter = new Elysia({ prefix: "/users" })
       return users;
     },
     {
-      auth: false,
-      partialAuth: true,
+      auth: true,
       query: t.Object({
         limit: t.Optional(
           t.Numeric({

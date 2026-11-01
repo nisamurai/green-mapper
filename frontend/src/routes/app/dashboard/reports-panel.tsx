@@ -155,8 +155,8 @@ export const DashboardReportsPanel = () => {
                 allIssues.map((issue) => (
                   <TableRow key={issue.issueId}>
                     <TableCell className="flex flex-wrap gap-2">
-                      {issue.statusId === IssueStatuses.PENDING ||
-                      issue.statusId === IssueStatuses.IN_WORK ? (
+                      {(issue.statusId === IssueStatuses.PENDING ||
+                        issue.statusId === IssueStatuses.IN_WORK) && (
                         <Button
                           variant="destructive"
                           className="w-4/5"
@@ -170,7 +170,9 @@ export const DashboardReportsPanel = () => {
                         >
                           Отклонить
                         </Button>
-                      ) : (
+                      )}
+                      {(issue.statusId === IssueStatuses.FINISHED ||
+                        issue.statusId === IssueStatuses.DECLINED) && (
                         <Button
                           variant="destructive"
                           className="w-4/5"
